@@ -2,6 +2,11 @@ name: Build Release Installers
 
 on:
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Optional version for release tag (e.g. 1.1.0 or v1.1.0). If omitted, no release is created."
+        required: false
+        type: string
   push:
     branches:
       - main
@@ -81,13 +86,73 @@ jobs:
           path: installer_output/SchoolInformationDashboard-macOS.dmg
           if-no-files-found: error
 
-  create-release:
-    name: Create GitHub Release
+  prepare-release:
+    name: Resolve release tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      create_release: ${{ steps.resolve.outputs.create_release }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag source
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          create_release=false
+          tag=""
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            tag="${GITHUB_REF#refs/tags/}"
+            create_release=true
+          elif [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            if [[ ! -f VERSION ]]; then
+              echo "VERSION file is required for main branch releases."
+              exit 1
+            fi
+            version="$(tr -d '[:space:]' < VERSION)"
+            if [[ -z "${version}" ]]; then
+              echo "VERSION file is empty."
+              exit 1
+            fi
+            tag="v${version#v}"
+            create_release=true
+          elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            input_version="${{ github.event.inputs.release_version || '' }}"
+            input_version="$(echo "${input_version}" | tr -d '[:space:]')"
+            if [[ -n "${input_version}" ]]; then
+              tag="v${input_version#v}"
+              create_release=true
+            fi
+          fi
+
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "create_release=${create_release}" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update tag for main/workflow-dispatch release
+        if: steps.resolve.outputs.create_release == 'true' && github.ref_type != 'tag'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.resolve.outputs.tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f "${tag}" "${GITHUB_SHA}"
+          git push origin "refs/tags/${tag}" --force
+
+  create-or-update-release:
+    name: Create or update GitHub Release
     runs-on: ubuntu-latest
     needs:
       - build-windows
       - build-macos
-    if: github.ref == 'refs/heads/main'
+      - prepare-release
+    if: needs.prepare-release.outputs.create_release == 'true'
 
     steps:
       - name: Download Windows installer artifact
@@ -102,9 +167,13 @@ jobs:
           name: macos-dmg
           path: release-assets
 
-      - name: Create GitHub Release
+      - name: Create or update GitHub Release and replace assets
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.prepare-release.outputs.tag }}
           files: |
             release-assets/SchoolInformationDashboardSetup.exe
             release-assets/SchoolInformationDashboard-macOS.dmg
+          make_latest: true
+          fail_on_unmatched_files: true
+          append_body: true

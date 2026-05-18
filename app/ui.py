@@ -54,6 +54,8 @@ class SoftwareUpdateWorker(QThread):
 
 
 class MainWindow(QMainWindow):
+    CATEGORY_ORDER = ("Times", "Dates", "Contact", "General")
+
     def __init__(self, cache_dir: Path, theme: dict[str, str]):
         super().__init__()
         self.cache_dir = cache_dir
@@ -65,7 +67,7 @@ class MainWindow(QMainWindow):
         self.platform_name = platform.system()
         self.installer_path: Path | None = None
 
-        self.setWindowTitle(self.theme["app_title"])
+        self.setWindowTitle(f"{self.theme['app_title']} - Version {config.APP_VERSION}")
         icon_path = resource_path("assets", "app_icon.ico")
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
@@ -104,8 +106,11 @@ class MainWindow(QMainWindow):
         company.setObjectName("company")
         title = QLabel(self.theme["app_title"])
         title.setObjectName("title")
+        app_version = QLabel(f"Version {config.APP_VERSION}")
+        app_version.setObjectName("appVersion")
         title_block.addWidget(company)
         title_block.addWidget(title)
+        title_block.addWidget(app_version)
         header_layout.addLayout(title_block, 1)
 
         self.version_label = QLabel("Data version: Loading")
@@ -164,10 +169,10 @@ class MainWindow(QMainWindow):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         self.cards_container = QWidget()
-        self.cards_layout = QVBoxLayout(self.cards_container)
+        self.cards_layout = QGridLayout(self.cards_container)
         self.cards_layout.setContentsMargins(0, 0, 0, 0)
-        self.cards_layout.setSpacing(10)
-        self.cards_layout.addStretch(1)
+        self.cards_layout.setHorizontalSpacing(12)
+        self.cards_layout.setVerticalSpacing(12)
         scroll.setWidget(self.cards_container)
         content.addWidget(scroll, 1)
 
@@ -271,37 +276,77 @@ class MainWindow(QMainWindow):
         self._clear_cards()
         if not record:
             self.school_title.setText("No matching school found")
-            self.cards_layout.insertWidget(0, QLabel("Try a different search term or reload the cached data."))
+            self.cards_layout.addWidget(QLabel("Try a different search term or reload the cached data."), 0, 0)
             return
+
         self.school_title.setText(record.get("school_name", "Selected school"))
+        grouped = self._group_fields(record)
+        for idx, category in enumerate(self.CATEGORY_ORDER):
+            row, col = divmod(idx, 2)
+            self.cards_layout.addWidget(self._make_category_card(category, grouped[category]), row, col)
+
+    def _group_fields(self, record: dict[str, str]) -> dict[str, list[tuple[str, str]]]:
+        grouped = {name: [] for name in self.CATEGORY_ORDER}
         for column, value in record.items():
             if column == "school_id":
                 continue
-            self.cards_layout.insertWidget(self.cards_layout.count() - 1, self._make_card(column, value))
+            category = self._resolve_category(column)
+            grouped[category].append((column, value))
+        return grouped
 
-    def _make_card(self, column: str, value: str) -> QFrame:
+    def _resolve_category(self, column: str) -> str:
+        key = column.lower()
+        if any(term in key for term in ("time", "timetable", "session", "opening", "closing", "pool")):
+            return "Times"
+        if any(term in key for term in ("date", "term", "half", "inset", "holiday", "deadline")):
+            return "Dates"
+        if any(term in key for term in ("manager", "email", "phone", "website", "address", "contact")):
+            return "Contact"
+        return "General"
+
+    def _make_category_card(self, category: str, fields: list[tuple[str, str]]) -> QFrame:
         card = QFrame()
-        card.setObjectName("card")
+        card.setObjectName("categoryCard")
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         layout = QVBoxLayout(card)
-        label = QLabel(readable_label(column))
-        label.setObjectName("cardLabel")
-        body = QLabel(value or config.NOT_PROVIDED)
-        body.setObjectName("cardBody")
-        body.setWordWrap(True)
-        body.setTextInteractionFlags(Qt.TextBrowserInteraction)
-        body.setOpenExternalLinks(True)
-        if value != config.NOT_PROVIDED and (column.lower() == "website" or value.startswith(("http://", "https://", "www."))):
-            url = normalise_url(value)
-            body.setText(f'<a href="{url}">{value}</a>')
-        elif value != config.NOT_PROVIDED and (column.lower() == "email" or is_probable_email(value)):
-            body.setText(f'<a href="mailto:{value}">{value}</a>')
-        layout.addWidget(label)
-        layout.addWidget(body)
+        title = QLabel(category)
+        title.setObjectName("categoryTitle")
+        layout.addWidget(title)
+
+        if not fields:
+            empty = QLabel(config.NOT_PROVIDED)
+            empty.setObjectName("cardBody")
+            empty.setWordWrap(True)
+            layout.addWidget(empty)
+            return card
+
+        for column, value in fields:
+            field = QFrame()
+            field.setObjectName("fieldRow")
+            field_layout = QVBoxLayout(field)
+            field_layout.setContentsMargins(0, 0, 0, 0)
+            field_layout.setSpacing(1)
+            label = QLabel(readable_label(column))
+            label.setObjectName("cardLabel")
+            body = QLabel(value or config.NOT_PROVIDED)
+            body.setObjectName("cardBody")
+            body.setWordWrap(True)
+            body.setTextInteractionFlags(Qt.TextBrowserInteraction)
+            body.setOpenExternalLinks(True)
+            if value != config.NOT_PROVIDED and (column.lower() == "website" or value.startswith(("http://", "https://", "www."))):
+                url = normalise_url(value)
+                body.setText(f'<a href="{url}">{value}</a>')
+            elif value != config.NOT_PROVIDED and (column.lower() == "email" or is_probable_email(value)):
+                body.setText(f'<a href="mailto:{value}">{value}</a>')
+            field_layout.addWidget(label)
+            field_layout.addWidget(body)
+            layout.addWidget(field)
+
+        layout.addStretch(1)
         return card
 
     def _clear_cards(self) -> None:
-        while self.cards_layout.count() > 1:
+        while self.cards_layout.count():
             item = self.cards_layout.takeAt(0)
             widget = item.widget()
             if widget:
@@ -320,9 +365,13 @@ class MainWindow(QMainWindow):
         text = self.theme["text_colour"]
         return f"""
         QMainWindow, QWidget {{ background: {secondary}; color: {text}; font-family: Arial, Helvetica, sans-serif; font-size: 14px; }}
+        QLabel {{ background: transparent; border: none; }}
+        QTextEdit, QTextBrowser {{ background: transparent; border: none; }}
+        QFrame {{ background-color: transparent; }}
         #header {{ background: {primary}; color: white; }}
         #company {{ color: #DCE7FF; font-size: 14px; font-weight: 600; }}
         #title {{ color: white; font-size: 26px; font-weight: 700; }}
+        #appVersion {{ color: #DCE7FF; font-size: 12px; font-weight: 600; }}
         #meta {{ color: white; font-size: 12px; }}
         #logoFallback {{ color: white; font-weight: 700; border: 1px solid white; padding: 10px; border-radius: 8px; }}
         QLineEdit, QComboBox {{ background: white; border: 1px solid #CBD5E1; border-radius: 6px; padding: 8px; }}
@@ -332,7 +381,9 @@ class MainWindow(QMainWindow):
         #statusBanner[level="error"] {{ background: #FEE2E2; color: #991B1B; }}
         #statusBanner[level="success"] {{ background: #DCFCE7; color: #166534; }}
         #schoolTitle {{ font-size: 22px; font-weight: 700; margin-top: 8px; }}
-        #card {{ background: white; border: 1px solid #E5E7EB; border-radius: 10px; padding: 10px; }}
+        #categoryCard {{ background: white; border: 1px solid #E5E7EB; border-radius: 10px; padding: 12px; }}
+        #categoryTitle {{ color: {primary}; font-weight: 700; font-size: 18px; margin-bottom: 8px; }}
+        #fieldRow {{ border-bottom: 1px solid #EEF2F7; padding-bottom: 8px; margin-bottom: 8px; }}
         #cardLabel {{ color: {primary}; font-weight: 700; font-size: 13px; }}
         #cardBody {{ color: {text}; font-size: 14px; }}
         """
