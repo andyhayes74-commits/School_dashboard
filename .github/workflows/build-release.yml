@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   build-windows:
-    name: Build Windows installer
+    name: Build Windows installer + portable
     runs-on: windows-latest
 
     steps:
@@ -45,11 +45,55 @@ jobs:
         run: .\build_installer.bat
         shell: cmd
 
+      - name: Read VERSION
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "VERSION file is empty."
+          }
+          $version = $version.TrimStart("v")
+          "value=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Build Windows portable (onedir)
+        shell: cmd
+        run: |
+          python -m app.sample_excel
+          set ICON_ARG=
+          if exist assets\app_icon.ico set ICON_ARG=--icon assets\app_icon.ico
+          python -m PyInstaller --noconfirm --clean --onedir --windowed ^
+            --name SchoolDashboard ^
+            %ICON_ARG% ^
+            --hidden-import requests ^
+            --hidden-import urllib3 ^
+            --hidden-import certifi ^
+            --hidden-import charset_normalizer ^
+            --hidden-import idna ^
+            --add-data "assets;assets" ^
+            --add-data "data;data" ^
+            app\main.py
+
+      - name: Zip Windows portable folder
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.value }}"
+          $zipName = "SchoolDashboard-v$version-portable.zip"
+          if (Test-Path $zipName) { Remove-Item $zipName -Force }
+          Compress-Archive -Path "dist/SchoolDashboard/*" -DestinationPath $zipName -Force
+
       - name: Upload Windows installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
           path: installer_output/SchoolInformationDashboardSetup.exe
+          if-no-files-found: error
+
+      - name: Upload Windows portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable
+          path: SchoolDashboard-v${{ steps.version.outputs.value }}-portable.zip
           if-no-files-found: error
 
   build-macos:
@@ -167,12 +211,19 @@ jobs:
           name: macos-dmg
           path: release-assets
 
+      - name: Download Windows portable artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-portable
+          path: release-assets
+
       - name: Create or update GitHub Release and replace assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare-release.outputs.tag }}
           files: |
             release-assets/SchoolInformationDashboardSetup.exe
+            release-assets/SchoolDashboard-v*-portable.zip
             release-assets/SchoolInformationDashboard-macOS.dmg
           make_latest: true
           fail_on_unmatched_files: true

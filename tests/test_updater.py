@@ -55,6 +55,24 @@ def test_release_parsing_windows_asset():
     }
 
 
+def test_release_parsing_windows_portable_asset_when_installer_missing():
+    payload = {
+        "tag_name": "v1.2.3",
+        "assets": [
+            {
+                "name": "SchoolDashboard-v1.2.3-portable.zip",
+                "browser_download_url": "https://example.test/SchoolDashboard-v1.2.3-portable.zip",
+            }
+        ],
+    }
+    parsed = _parse_latest_release(payload, "Windows")
+    assert parsed == {
+        "version": "1.2.3",
+        "name": "SchoolDashboard-v1.2.3-portable.zip",
+        "url": "https://example.test/SchoolDashboard-v1.2.3-portable.zip",
+    }
+
+
 def test_release_parsing_returns_none_when_asset_missing():
     payload = {"tag_name": "v1.2.0", "assets": []}
     assert _parse_latest_release(payload, "Windows") is None

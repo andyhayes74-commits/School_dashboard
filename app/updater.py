@@ -85,16 +85,32 @@ def _parse_latest_release(payload: Any, platform_name: str) -> dict[str, str] | 
     if not version or not isinstance(assets, list):
         return None
 
-    target_name = config.WINDOWS_INSTALLER_NAME if platform_name == "Windows" else config.MACOS_INSTALLER_NAME if platform_name == "Darwin" else None
-    if not target_name:
+    if platform_name not in {"Windows", "Darwin"}:
         return None
+
+    windows_installer_asset: dict[str, str] | None = None
+    windows_portable_asset: dict[str, str] | None = None
+    macos_asset: dict[str, str] | None = None
 
     for asset in assets:
         if not isinstance(asset, dict):
             continue
-        if asset.get("name") == target_name and isinstance(asset.get("browser_download_url"), str):
-            return {"version": version, "name": target_name, "url": asset["browser_download_url"]}
-    return None
+        name = asset.get("name")
+        url = asset.get("browser_download_url")
+        if not isinstance(name, str) or not isinstance(url, str):
+            continue
+
+        if platform_name == "Windows":
+            if name == config.WINDOWS_INSTALLER_NAME:
+                windows_installer_asset = {"version": version, "name": name, "url": url}
+            elif name.startswith("SchoolDashboard-v") and name.endswith("-portable.zip"):
+                windows_portable_asset = {"version": version, "name": name, "url": url}
+        elif platform_name == "Darwin" and name == config.MACOS_INSTALLER_NAME:
+            macos_asset = {"version": version, "name": name, "url": url}
+
+    if platform_name == "Windows":
+        return windows_installer_asset or windows_portable_asset
+    return macos_asset
 
 
 def _normalise_version(tag: str) -> str | None:
