@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app import config
 import app.updater as updater
 from app.updater import (
     _parse_latest_release,
@@ -10,10 +11,11 @@ from app.updater import (
 
 
 class DummyResponse:
-    def __init__(self, payload=None, content: bytes = b"", status_ok: bool = True):
+    def __init__(self, payload=None, content: bytes = b"", status_ok: bool = True, status_code: int = 200):
         self._payload = payload
         self.content = content
         self.status_ok = status_ok
+        self.status_code = status_code
 
     def json(self):
         return self._payload
@@ -28,6 +30,11 @@ def test_version_comparison_semver_ordering():
     assert is_newer_version("v1.2.0", "1.1.9") is True
     assert is_newer_version("1.0.2", "1.0.2") is False
     assert is_newer_version("1.0.1", "1.0.2") is False
+
+
+def test_github_releases_url_not_placeholder():
+    assert "OWNER" not in config.GITHUB_RELEASES_API_URL
+    assert "REPOSITORY" not in config.GITHUB_RELEASES_API_URL
 
 
 def test_release_parsing_windows_asset():
@@ -48,21 +55,59 @@ def test_release_parsing_windows_asset():
     }
 
 
+def test_release_parsing_windows_portable_asset_when_installer_missing():
+    payload = {
+        "tag_name": "v1.2.3",
+        "assets": [
+            {
+                "name": "SchoolDashboard-v1.2.3-portable.zip",
+                "browser_download_url": "https://example.test/SchoolDashboard-v1.2.3-portable.zip",
+            }
+        ],
+    }
+    parsed = _parse_latest_release(payload, "Windows")
+    assert parsed == {
+        "version": "1.2.3",
+        "name": "SchoolDashboard-v1.2.3-portable.zip",
+        "url": "https://example.test/SchoolDashboard-v1.2.3-portable.zip",
+    }
+
+
 def test_release_parsing_returns_none_when_asset_missing():
     payload = {"tag_name": "v1.2.0", "assets": []}
     assert _parse_latest_release(payload, "Windows") is None
 
 
-def test_software_update_check_handles_no_internet(monkeypatch):
-    class OfflineRequests:
-        @staticmethod
-        def get(*_args, **_kwargs):
-            raise RuntimeError("network down")
+def test_release_parsing_macos_ignores_windows_portable_zip():
+    payload = {
+        "tag_name": "v1.2.3",
+        "assets": [
+            {
+                "name": "SchoolDashboard-v1.2.3-portable.zip",
+                "browser_download_url": "https://example.test/SchoolDashboard-v1.2.3-portable.zip",
+            },
+            {
+                "name": "SchoolInformationDashboard-macOS.dmg",
+                "browser_download_url": "https://example.test/SchoolInformationDashboard-macOS.dmg",
+            },
+        ],
+    }
+    parsed = _parse_latest_release(payload, "Darwin")
+    assert parsed == {
+        "version": "1.2.3",
+        "name": "SchoolInformationDashboard-macOS.dmg",
+        "url": "https://example.test/SchoolInformationDashboard-macOS.dmg",
+    }
 
-    monkeypatch.setattr(updater, "requests", OfflineRequests)
+
+def test_software_update_check_handles_no_internet(monkeypatch):
+    def offline_get(*_args, **_kwargs):
+        raise updater.requests.exceptions.ConnectionError("network down")
+
+    monkeypatch.setattr(updater.requests, "get", offline_get)
     result = check_for_software_update("1.2.0", "Windows")
     assert result.update_available is False
-    assert "failed" in result.message.lower()
+    assert "internet connection" in result.message.lower()
 
 
 def test_software_update_check_current_equals_latest(monkeypatch):
@@ -71,12 +116,7 @@ def test_software_update_check_current_equals_latest(monkeypatch):
         "assets": [{"name": "SchoolInformationDashboardSetup.exe", "browser_download_url": "https://example/v1.2.0.exe"}],
     }
 
-    class OnlineRequests:
-        @staticmethod
-        def get(*_args, **_kwargs):
-            return DummyResponse(payload=payload)
-
-    monkeypatch.setattr(updater, "requests", OnlineRequests)
+    monkeypatch.setattr(updater.requests, "get", lambda *_args, **_kwargs: DummyResponse(payload=payload))
     result = check_for_software_update("1.2.0", "Windows")
     assert result.update_available is False
     assert "latest" in result.message.lower()
@@ -88,12 +128,7 @@ def test_software_update_check_newer_version_exists(monkeypatch):
         "assets": [{"name": "SchoolInformationDashboardSetup.exe", "browser_download_url": "https://example/v1.3.0.exe"}],
     }
 
-    class OnlineRequests:
-        @staticmethod
-        def get(*_args, **_kwargs):
-            return DummyResponse(payload=payload)
-
-    monkeypatch.setattr(updater, "requests", OnlineRequests)
+    monkeypatch.setattr(updater.requests, "get", lambda *_args, **_kwargs: DummyResponse(payload=payload))
     result = check_for_software_update("1.2.0", "Windows")
     assert result.update_available is True
     assert result.latest_version == "1.3.0"
@@ -103,24 +138,31 @@ def test_software_update_check_newer_version_exists(monkeypatch):
 def test_software_update_check_when_asset_missing(monkeypatch):
     payload = {"tag_name": "v1.3.0", "assets": [{"name": "wrong.exe", "browser_download_url": "https://example/wrong.exe"}]}
 
-    class OnlineRequests:
-        @staticmethod
-        def get(*_args, **_kwargs):
-            return DummyResponse(payload=payload)
-
-    monkeypatch.setattr(updater, "requests", OnlineRequests)
+    monkeypatch.setattr(updater.requests, "get", lambda *_args, **_kwargs: DummyResponse(payload=payload))
     result = check_for_software_update("1.2.0", "Windows")
     assert result.update_available is False
-    assert "no compatible installer" in result.message.lower()
+    assert "no compatible installer asset" in result.message.lower()
+
+
+def test_software_update_check_invalid_placeholder_url():
+    result = check_for_software_update(
+        "1.2.2",
+        "Windows",
+        releases_api_url="https://api.github.com/repos/OWNER/REPOSITORY/releases/latest",
+    )
+    assert result.update_available is False
+    assert "misconfigured" in result.message.lower()
+
+
+def test_software_update_check_handles_rate_limiting(monkeypatch):
+    monkeypatch.setattr(updater.requests, "get", lambda *_args, **_kwargs: DummyResponse(payload={}, status_code=403))
+    result = check_for_software_update("1.2.2", "Windows")
+    assert result.update_available is False
+    assert "rate limit" in result.message.lower()
 
 
 def test_download_installer_failure(monkeypatch, tmp_path):
-    class FailingRequests:
-        @staticmethod
-        def get(*_args, **_kwargs):
-            return DummyResponse(status_ok=False)
-
-    monkeypatch.setattr(updater, "requests", FailingRequests)
+    monkeypatch.setattr(updater.requests, "get", lambda *_args, **_kwargs: DummyResponse(status_ok=False))
     target = tmp_path / "setup.exe"
     try:
         download_installer("https://example/setup.exe", target)
@@ -131,12 +173,7 @@ def test_download_installer_failure(monkeypatch, tmp_path):
 
 
 def test_download_installer_success(monkeypatch, tmp_path):
-    class OnlineRequests:
-        @staticmethod
-        def get(*_args, **_kwargs):
-            return DummyResponse(content=b"binary")
-
-    monkeypatch.setattr(updater, "requests", OnlineRequests)
+    monkeypatch.setattr(updater.requests, "get", lambda *_args, **_kwargs: DummyResponse(content=b"binary"))
     target = tmp_path / "setup.exe"
     written = download_installer("https://example/setup.exe", target)
     assert written == target
