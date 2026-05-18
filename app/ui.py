@@ -142,23 +142,14 @@ class MainWindow(QMainWindow):
         self.search_box.textChanged.connect(self._apply_filter)
         self.school_combo = QComboBox()
         self.school_combo.currentIndexChanged.connect(self._display_selected_school)
-        self.update_button = QPushButton("Check data updates")
-        self.update_button.clicked.connect(self.check_updates)
-        self.software_check_button = QPushButton("Check software updates")
-        self.software_check_button.clicked.connect(self.check_software_updates)
         self.install_update_button = QPushButton("Install update")
         self.install_update_button.setEnabled(False)
         self.install_update_button.clicked.connect(self.install_update)
-        self.reload_button = QPushButton("Reload data")
-        self.reload_button.clicked.connect(lambda: self.reload_data(show_success=True))
         controls.addWidget(QLabel("Search"), 0, 0)
         controls.addWidget(self.search_box, 0, 1)
         controls.addWidget(QLabel("School"), 1, 0)
         controls.addWidget(self.school_combo, 1, 1)
-        controls.addWidget(self.update_button, 0, 2)
-        controls.addWidget(self.software_check_button, 0, 3)
-        controls.addWidget(self.reload_button, 1, 2)
-        controls.addWidget(self.install_update_button, 1, 3)
+        controls.addWidget(self.install_update_button, 1, 2)
         controls.setColumnStretch(1, 1)
         content.addLayout(controls)
 
@@ -196,14 +187,12 @@ class MainWindow(QMainWindow):
     def check_updates(self) -> None:
         if self.sync_worker and self.sync_worker.isRunning():
             return
-        self.update_button.setEnabled(False)
         self._set_status("Checking GitHub for updated school data...", "info")
         self.sync_worker = SyncWorker(self.cache_dir)
         self.sync_worker.completed.connect(self._sync_finished)
         self.sync_worker.start()
 
     def _sync_finished(self, result: SyncResult) -> None:
-        self.update_button.setEnabled(True)
         self._set_status(result.message, "success" if result.updated else "info")
         if result.updated:
             self.reload_data(show_success=False)
@@ -213,14 +202,12 @@ class MainWindow(QMainWindow):
     def check_software_updates(self) -> None:
         if self.software_worker and self.software_worker.isRunning():
             return
-        self.software_check_button.setEnabled(False)
         self._set_status("Checking for software updates from GitHub Releases...", "info")
         self.software_worker = SoftwareUpdateWorker(config.APP_VERSION, self.platform_name)
         self.software_worker.completed.connect(self._software_update_finished)
         self.software_worker.start()
 
     def _software_update_finished(self, result: SoftwareUpdateResult) -> None:
-        self.software_check_button.setEnabled(True)
         if result.update_available and result.installer_url and result.installer_name:
             destination = self.cache_dir / result.installer_name
             try:
