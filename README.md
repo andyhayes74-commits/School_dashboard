@@ -185,12 +185,36 @@ installer_output/SchoolInformationDashboard-macOS.dmg
 
 macOS app and DMG builds must be produced on macOS. The v1 scripts and GitHub Actions workflow do not perform Apple code signing or notarisation. Unsigned apps may trigger Gatekeeper warnings; production distribution should add proper Apple Developer ID signing and notarisation later.
 
+## Software Updates (v1.0.2+)
+
+The app now supports GitHub Releases-based software update checks for installer-driven upgrades (no silent in-place binary replacement).
+
+Configuration lives in `app/config.py`:
+
+- `APP_VERSION` (current installed app version, starts at `1.0.2`)
+- `AUTO_CHECK_SOFTWARE_UPDATES = True`
+- `GITHUB_RELEASES_API_URL` (GitHub Releases latest API endpoint)
+
+Update flow:
+
+1. On launch, the app checks the latest GitHub Release when auto-check is enabled.
+2. If offline or the check fails, the app continues normally using cached school data.
+3. If a newer tag version exists, the app downloads the platform installer into the user cache folder:
+   - Windows: `SchoolInformationDashboardSetup.exe`
+   - macOS: `SchoolInformationDashboard-macOS.dmg`
+4. The app enables **Install update**:
+   - Windows: launches the downloaded `.exe` installer and closes the app.
+   - macOS: opens the downloaded `.dmg` and instructs the user to install manually.
+
+Cached school data remains in the user cache directory and is not deleted during software update actions.
+
 ## GitHub Actions Release Builds
 
-The repository includes `.github/workflows/build-release.yml` to build release installers without committing generated build outputs. The workflow runs in two ways:
+The repository includes `.github/workflows/build-release.yml` to build release installers without committing generated build outputs. The workflow runs in three ways:
 
 - Manually from the GitHub Actions **Build Release Installers** workflow using `workflow_dispatch`.
-- Automatically when a version tag matching `v*` is pushed, for example `v1.0.0`.
+- Automatically when changes are pushed to `main` (test build only; artifacts are uploaded to the workflow run).
+- Automatically when a version tag matching `v*` is pushed, for example `v1.0.0` (official release build).
 
 The workflow builds and uploads these artifacts:
 
@@ -199,7 +223,12 @@ The workflow builds and uploads these artifacts:
 | Windows | `windows-latest` | `installer_output/SchoolInformationDashboardSetup.exe` |
 | macOS | `macos-latest` | `installer_output/SchoolInformationDashboard-macOS.dmg` |
 
-For tag builds, GitHub Actions also creates a GitHub Release for the tag and attaches both installer files. Manual runs upload artifacts to the workflow run but do not create a release.
+For tag builds, GitHub Actions creates a GitHub Release for the tag and attaches both installer files. For `main` pushes and manual runs, the workflow only uploads artifacts to the workflow run and does not create a release.
+
+Release flow:
+
+- Merge to `main` = automatic test build (artifacts only, no GitHub Release).
+- Push a version tag (`v*`) = official release (artifacts + GitHub Release).
 
 To publish a tagged release:
 

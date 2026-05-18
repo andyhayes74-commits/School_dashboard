@@ -1,0 +1,116 @@
+"""Software update checks and installer download helpers."""
+
+from __future__ import annotations
+
+import importlib
+import importlib.util
+import re
+import subprocess
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from app import config
+
+requests = importlib.import_module("requests") if importlib.util.find_spec("requests") else None
+
+
+@dataclass(frozen=True)
+class SoftwareUpdateResult:
+    update_available: bool
+    message: str
+    current_version: str
+    latest_version: str | None = None
+    installer_url: str | None = None
+    installer_name: str | None = None
+
+
+def check_for_software_update(
+    current_version: str,
+    platform_name: str,
+    releases_api_url: str = config.GITHUB_RELEASES_API_URL,
+    timeout: int = 15,
+) -> SoftwareUpdateResult:
+    if not config.AUTO_CHECK_SOFTWARE_UPDATES:
+        return SoftwareUpdateResult(False, "Automatic software update checks are disabled.", current_version)
+    if requests is None:
+        return SoftwareUpdateResult(False, "Software update check unavailable offline. Continuing normally.", current_version)
+
+    try:
+        response = requests.get(releases_api_url, timeout=timeout)
+        response.raise_for_status()
+        release = _parse_latest_release(response.json(), platform_name)
+        if not release:
+            return SoftwareUpdateResult(False, "No compatible installer found in latest release. Continuing normally.", current_version)
+
+        latest_version = release["version"]
+        if not is_newer_version(latest_version, current_version):
+            return SoftwareUpdateResult(False, "You already have the latest software version.", current_version, latest_version)
+
+        return SoftwareUpdateResult(
+            True,
+            f"Update available: v{latest_version}. Download ready when requested.",
+            current_version,
+            latest_version,
+            release["url"],
+            release["name"],
+        )
+    except Exception as exc:
+        return SoftwareUpdateResult(False, f"Software update check failed. Continuing normally. Details: {exc}", current_version)
+
+
+def _parse_latest_release(payload: Any, platform_name: str) -> dict[str, str] | None:
+    if not isinstance(payload, dict):
+        return None
+    tag = str(payload.get("tag_name") or "").strip()
+    version = _normalise_version(tag)
+    assets = payload.get("assets")
+    if not version or not isinstance(assets, list):
+        return None
+
+    target_name = config.WINDOWS_INSTALLER_NAME if platform_name == "Windows" else config.MACOS_INSTALLER_NAME if platform_name == "Darwin" else None
+    if not target_name:
+        return None
+
+    for asset in assets:
+        if not isinstance(asset, dict):
+            continue
+        if asset.get("name") == target_name and isinstance(asset.get("browser_download_url"), str):
+            return {"version": version, "name": target_name, "url": asset["browser_download_url"]}
+    return None
+
+
+def _normalise_version(tag: str) -> str | None:
+    m = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", tag)
+    if not m:
+        return None
+    return ".".join(m.groups())
+
+
+def is_newer_version(candidate: str, installed: str) -> bool:
+    return _version_tuple(candidate) > _version_tuple(installed)
+
+
+def _version_tuple(version: str) -> tuple[int, int, int]:
+    clean = _normalise_version(version) or "0.0.0"
+    return tuple(int(p) for p in clean.split("."))  # type: ignore[return-value]
+
+
+def download_installer(installer_url: str, destination: Path, timeout: int = 30) -> Path:
+    if requests is None:
+        raise RuntimeError("requests is not installed")
+    response = requests.get(installer_url, timeout=timeout)
+    response.raise_for_status()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(response.content)
+    return destination
+
+
+def install_downloaded_update(platform_name: str, installer_path: Path) -> str:
+    if platform_name == "Windows":
+        subprocess.Popen([str(installer_path)], shell=True)
+        return "Installer launched. The app will now close so you can complete the update."
+    if platform_name == "Darwin":
+        subprocess.Popen(["open", str(installer_path)])
+        return "DMG opened. Install the app from the mounted image, then reopen the dashboard."
+    raise RuntimeError("Software updates are supported only on Windows and macOS.")
