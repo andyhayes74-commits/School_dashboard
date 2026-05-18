@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       release_version:
-        description: "Optional version for release tag (e.g. 1.1.0 or v1.1.0). If omitted, no release is created."
+        description: "Optional version for release tag (e.g. 1.2.0 or v1.2.0). If omitted, no release is created."
         required: false
         type: string
   push:
