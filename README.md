@@ -187,10 +187,11 @@ macOS app and DMG builds must be produced on macOS. The v1 scripts and GitHub Ac
 
 ## GitHub Actions Release Builds
 
-The repository includes `.github/workflows/build-release.yml` to build release installers without committing generated build outputs. The workflow runs in two ways:
+The repository includes `.github/workflows/build-release.yml` to build release installers without committing generated build outputs. The workflow runs in three ways:
 
 - Manually from the GitHub Actions **Build Release Installers** workflow using `workflow_dispatch`.
-- Automatically when a version tag matching `v*` is pushed, for example `v1.0.0`.
+- Automatically when changes are pushed to `main` (test build only; artifacts are uploaded to the workflow run).
+- Automatically when a version tag matching `v*` is pushed, for example `v1.0.0` (official release build).
 
 The workflow builds and uploads these artifacts:
 
@@ -199,7 +200,12 @@ The workflow builds and uploads these artifacts:
 | Windows | `windows-latest` | `installer_output/SchoolInformationDashboardSetup.exe` |
 | macOS | `macos-latest` | `installer_output/SchoolInformationDashboard-macOS.dmg` |
 
-For tag builds, GitHub Actions also creates a GitHub Release for the tag and attaches both installer files. Manual runs upload artifacts to the workflow run but do not create a release.
+For tag builds, GitHub Actions creates a GitHub Release for the tag and attaches both installer files. For `main` pushes and manual runs, the workflow only uploads artifacts to the workflow run and does not create a release.
+
+Release flow:
+
+- Merge to `main` = automatic test build (artifacts only, no GitHub Release).
+- Push a version tag (`v*`) = official release (artifacts + GitHub Release).
 
 To publish a tagged release:
 
