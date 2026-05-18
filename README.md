@@ -185,13 +185,13 @@ installer_output/SchoolInformationDashboard-macOS.dmg
 
 macOS app and DMG builds must be produced on macOS. The v1 scripts and GitHub Actions workflow do not perform Apple code signing or notarisation. Unsigned apps may trigger Gatekeeper warnings; production distribution should add proper Apple Developer ID signing and notarisation later.
 
-## Software Updates (v1.0.2+)
+## Software Updates (v1.1.0+)
 
 The app now supports GitHub Releases-based software update checks for installer-driven upgrades (no silent in-place binary replacement).
 
 Configuration lives in `app/config.py`:
 
-- `APP_VERSION` (current installed app version, starts at `1.0.2`)
+- `APP_VERSION` (current installed app version, set to `1.1.0` for this release)
 - `AUTO_CHECK_SOFTWARE_UPDATES = True`
 - `GITHUB_RELEASES_API_URL` (GitHub Releases latest API endpoint)
 
@@ -214,7 +214,7 @@ The repository includes `.github/workflows/build-release.yml` to build release i
 
 - Manually from the GitHub Actions **Build Release Installers** workflow using `workflow_dispatch`.
 - Automatically when changes are pushed to `main` (test build only; artifacts are uploaded to the workflow run).
-- Automatically when a version tag matching `v*` is pushed, for example `v1.0.0` (official release build).
+- Automatically when a version tag matching `v*` is pushed, for example `v1.1.0` (official release build).
 
 The workflow builds and uploads these artifacts:
 
@@ -233,8 +233,8 @@ Release flow:
 To publish a tagged release:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.1.0
+git push origin v1.1.0
 ```
 
 Do not commit `dist/`, `build/`, `installer_output/`, `.exe`, `.dmg`, `.app`, or generated `.xlsx` files; they are ignored build/runtime outputs. The macOS app and DMG produced by this workflow are unsigned unless Apple Developer ID signing and notarisation are added later.
