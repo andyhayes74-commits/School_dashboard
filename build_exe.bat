@@ -10,6 +10,11 @@ if not exist assets\app_icon.ico echo assets\app_icon.ico not found; building wi
 python -m PyInstaller --noconfirm --clean --onefile --windowed ^
   --name SchoolInformationDashboard ^
   %ICON_ARG% ^
+  --hidden-import requests ^
+  --hidden-import urllib3 ^
+  --hidden-import certifi ^
+  --hidden-import charset_normalizer ^
+  --hidden-import idna ^
   --add-data "assets;assets" ^
   --add-data "data;data" ^
   app\main.py
