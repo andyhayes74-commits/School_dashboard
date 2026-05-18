@@ -1,0 +1,8 @@
+{
+  "title": "School Information Dashboard",
+  "volume_name": "School Information Dashboard",
+  "app_path": "dist/School Information Dashboard.app",
+  "output_path": "installer_output/SchoolInformationDashboard-macOS.dmg",
+  "applications_link": true,
+  "notes": "The DMG script must run on macOS. It uses create-dmg when available, otherwise hdiutil. Unsigned apps may trigger Gatekeeper warnings."
+}
