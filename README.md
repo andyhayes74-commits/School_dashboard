@@ -212,9 +212,9 @@ Cached school data remains in the user cache directory and is not deleted during
 
 The repository includes `.github/workflows/build-release.yml` to build release installers without committing generated build outputs. The workflow runs in three ways:
 
-- Manually from the GitHub Actions **Build Release Installers** workflow using `workflow_dispatch`.
-- Automatically when changes are pushed to `main` (test build only; artifacts are uploaded to the workflow run).
-- Automatically when a version tag matching `v*` is pushed, for example `v1.1.0` (official release build).
+- Automatically when changes are pushed to `main`: reads the repo-root `VERSION` file, creates/updates tag `v<VERSION>`, then creates/updates the GitHub Release from that tag.
+- Automatically when a version tag matching `v*` is pushed, for example `v1.1.0`: builds and publishes that tag's release assets.
+- Manually from GitHub Actions using `workflow_dispatch`: builds artifacts only by default; only creates/updates a release when `release_version` input is provided.
 
 The workflow builds and uploads these artifacts:
 
@@ -223,12 +223,13 @@ The workflow builds and uploads these artifacts:
 | Windows | `windows-latest` | `installer_output/SchoolInformationDashboardSetup.exe` |
 | macOS | `macos-latest` | `installer_output/SchoolInformationDashboard-macOS.dmg` |
 
-For tag builds, GitHub Actions creates a GitHub Release for the tag and attaches both installer files. For `main` pushes and manual runs, the workflow only uploads artifacts to the workflow run and does not create a release.
+For any run that resolves a release tag, GitHub Actions creates or updates the matching GitHub Release and replaces installer assets so reruns do not fail on existing files. If no tag is resolved (manual run without `release_version`), the workflow uploads artifacts only.
 
 Release flow:
 
-- Merge to `main` = automatic test build (artifacts only, no GitHub Release).
-- Push a version tag (`v*`) = official release (artifacts + GitHub Release).
+- Merge to `main` = official release flow (tag is created/updated from `VERSION`, then release is created/updated from that tag).
+- Push a version tag (`v*`) = official release (artifacts + GitHub Release for that tag).
+- Manual `workflow_dispatch` without `release_version` = artifacts only (no release).
 
 To publish a tagged release:
 
@@ -247,3 +248,8 @@ Do not commit `dist/`, `build/`, `installer_output/`, `.exe`, `.dmg`, `.app`, or
 - Produce Windows builds on Windows and macOS builds on macOS.
 - Upload built `.exe`, installer, and `.dmg` artifacts to GitHub Releases; do not commit them.
 - Add code signing/notarisation if required for managed distribution.
+
+
+### VERSION file
+
+The repository root `VERSION` file must contain the current application version (for example `1.1.0`). Main-branch release automation reads this file and uses it to manage the `v<VERSION>` tag before publishing/updating the GitHub Release.
