@@ -1,0 +1,9 @@
+{
+  "company_name": "World of Swimming",
+  "app_title": "School Information Dashboard",
+  "primary_colour": "#23408F",
+  "secondary_colour": "#F5F7FA",
+  "accent_colour": "#3B82F6",
+  "text_colour": "#1F2937",
+  "logo_placeholder_note": "assets/logo.png is a safe placeholder. Replace it with the final World of Swimming logo before production distribution."
+}
