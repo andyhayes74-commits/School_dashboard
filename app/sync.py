@@ -14,7 +14,8 @@ from typing import Any
 requests = importlib.import_module("requests") if importlib.util.find_spec("requests") else None
 
 from app import config
-from app.data_loader import DataValidationError, load_schools_excel
+from app.data_loader import DataValidationError, load_schools_csv, load_schools_excel
+from app.sample_excel import generate_sample_xlsx
 from app.utils import load_json_file
 
 
@@ -29,7 +30,7 @@ class SyncResult:
 def check_for_updates(
     cache_dir: Path,
     remote_version_url: str = config.REMOTE_VERSION_URL,
-    remote_excel_url: str = config.REMOTE_EXCEL_URL,
+    remote_data_url: str = config.REMOTE_DATA_URL,
     timeout: int = 15,
 ) -> SyncResult:
     """Check GitHub for newer data and update cache only after validation."""
@@ -53,12 +54,17 @@ def check_for_updates(
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            downloaded_excel = temp_path / config.EXCEL_FILENAME
+            downloaded_csv = temp_path / config.CSV_FILENAME
+            generated_excel = temp_path / config.EXCEL_FILENAME
             downloaded_version = temp_path / config.VERSION_FILENAME
-            _download_file(remote_excel_url, downloaded_excel, timeout)
-            load_schools_excel(downloaded_excel)
+
+            _download_file(remote_data_url, downloaded_csv, timeout)
+            load_schools_csv(downloaded_csv)
+            generate_sample_xlsx(downloaded_csv, generated_excel)
+            load_schools_excel(generated_excel)
+
             downloaded_version.write_text(json.dumps(remote_version, indent=2), encoding="utf-8")
-            shutil.copy2(downloaded_excel, local_excel_path)
+            shutil.copy2(generated_excel, local_excel_path)
             shutil.copy2(downloaded_version, local_version_path)
 
         return SyncResult(True, "School data was updated successfully.", local_data_version, remote_data_version)

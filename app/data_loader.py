@@ -1,12 +1,15 @@
-"""Excel loading and validation for school data.
+"""School data loading and validation helpers.
 
-The production dependency set uses pandas/openpyxl. A small stdlib fallback parser is
-included so validation and cache-safety tests can run in constrained environments.
+The runtime cache remains an Excel workbook, while GitHub-hosted source data is
+CSV. The production dependency set uses pandas/openpyxl where available. Small
+stdlib fallback parsers are included so validation and cache-safety tests can run
+in constrained environments.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+import csv
 import importlib
 import importlib.util
 from pathlib import Path
@@ -36,7 +39,7 @@ def _normalise_headers(columns: Iterable[object]) -> list[str]:
     for column in columns:
         header = "" if column is None else str(column).strip()
         if not header or header.lower().startswith("unnamed:"):
-            raise DataValidationError("The Excel file has a blank column header. Please fill every header cell.")
+            raise DataValidationError("The school data file has a blank column header. Please fill every header cell.")
         headers.append(header)
     return headers
 
@@ -56,7 +59,7 @@ def validate_school_records(columns: Iterable[object], rows: Iterable[dict[str, 
     missing = [column for column in config.REQUIRED_COLUMNS if column not in headers]
     if missing:
         missing_text = ", ".join(missing)
-        raise DataValidationError(f"The Excel file is missing required column(s): {missing_text}.")
+        raise DataValidationError(f"The school data file is missing required column(s): {missing_text}.")
 
     normalised_rows: list[dict[str, str]] = []
     for source_row in rows:
@@ -67,7 +70,7 @@ def validate_school_records(columns: Iterable[object], rows: Iterable[dict[str, 
         normalised_rows.append(row)
 
     if not normalised_rows:
-        raise DataValidationError("The Excel file does not contain any school rows.")
+        raise DataValidationError("The school data file does not contain any school rows.")
     return SchoolTable(headers, normalised_rows)
 
 
@@ -82,6 +85,36 @@ def validate_school_dataframe(df: Any) -> Any:
         return table
     pd = importlib.import_module("pandas")
     return pd.DataFrame(table.rows, columns=table.columns)
+
+
+def load_schools_csv(path: str | Path) -> Any:
+    """Load and validate source-controlled school data from a CSV file."""
+    csv_path = Path(path)
+    if not csv_path.exists():
+        raise DataValidationError(f"The school data file could not be found: {csv_path}")
+
+    if importlib.util.find_spec("pandas") is not None:
+        pd = importlib.import_module("pandas")
+        try:
+            df = pd.read_csv(csv_path, dtype=object, keep_default_na=False)
+            return validate_school_dataframe(df)
+        except DataValidationError:
+            raise
+        except Exception as exc:
+            raise DataValidationError(f"The CSV file could not be read: {exc}") from exc
+
+    try:
+        with csv_path.open("r", encoding="utf-8-sig", newline="") as handle:
+            reader = csv.DictReader(handle)
+            if reader.fieldnames is None:
+                raise DataValidationError("The school data file does not contain a header row.")
+            return validate_school_records(reader.fieldnames, reader)
+    except DataValidationError:
+        raise
+    except csv.Error as exc:
+        raise DataValidationError(f"The CSV file could not be read: {exc}") from exc
+    except OSError as exc:
+        raise DataValidationError(f"The CSV file could not be read: {exc}") from exc
 
 
 def load_schools_excel(path: str | Path) -> Any:
@@ -128,7 +161,7 @@ def _load_xlsx_with_stdlib(path: Path) -> SchoolTable:
         raise DataValidationError(f"The Excel file could not be read: {exc}") from exc
 
     if not rows:
-        raise DataValidationError("The Excel file does not contain any school rows.")
+        raise DataValidationError("The school data file does not contain any school rows.")
     headers = rows[0]
     record_rows = [dict(zip(headers, row + [None] * (len(headers) - len(row)))) for row in rows[1:]]
     return validate_school_records(headers, record_rows)

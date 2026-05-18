@@ -1,6 +1,6 @@
 {
   "data_version": "2026-05-18-001",
   "updated_at": "2026-05-18",
-  "excel_file": "schools.xlsx",
+  "data_file": "schools.csv",
   "notes": "Initial sample school data"
 }

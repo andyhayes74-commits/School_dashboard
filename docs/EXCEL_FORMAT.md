@@ -1,14 +1,10 @@
-# Excel Data Format
+# School Data Format
 
-The dashboard reads school information from `schools.xlsx`. To avoid committing binary files, the repository stores sample data at `data/schools.csv`; `python -m app.sample_excel` can generate a local ignored `data/schools.xlsx` when a workbook is needed for a build or release.
+The repository stores school information in `data/schools.csv`. The dashboard keeps a local cached runtime workbook named `schools.xlsx`; `python -m app.sample_excel` can generate a local ignored `data/schools.xlsx` when a workbook is needed for a build or manual validation.
 
-## Required Sheet Name
+## Source CSV
 
-The workbook must contain a sheet named exactly:
-
-```text
-schools
-```
+Edit school-data updates in `data/schools.csv`, then bump `data/version.json` with a new `data_version` so GitHub sync can detect the change. Do not commit generated `.xlsx` files.
 
 ## Required Columns
 
@@ -44,15 +40,14 @@ Extra columns are allowed and will be displayed automatically. Do not change the
 ## Editing Rules
 
 - Keep one row per school.
-- Do not use merged cells.
 - Do not leave header cells blank.
 - Keep `school_id` and `school_name` populated for every row.
 - Blank optional cells are allowed; the app displays them as `Not provided`.
 - Dates can be plain text for v1.
-- Save the file as `.xlsx`, not `.csv` or `.xls`.
+- Save source-controlled updates as `data/schools.csv`.
 - If publishing updates through GitHub, update `data/version.json` with a new `data_version` so the app can detect the change.
-- Do not commit generated `.xlsx` files to the normal repository history; upload release data/build artifacts through the approved release process.
+- Do not commit generated `.xlsx` files to the normal repository history; they are local runtime/build artifacts only.
 
 ## Data Safety Warning
 
-Do **not** store confidential, safeguarding, pupil-sensitive, staff-sensitive, medical, behavioural, or access-control information in GitHub-hosted Excel data. The GitHub sync design is intended only for public or approved operational information that is safe to distribute to all app users.
+Do **not** store confidential, safeguarding, pupil-sensitive, staff-sensitive, medical, behavioural, or access-control information in GitHub-hosted CSV data. The GitHub sync design is intended only for public or approved operational information that is safe to distribute to all app users.

@@ -7,19 +7,20 @@ COMPANY_NAME = "World of Swimming"
 CACHE_APP_DIR_NAME = "SchoolInfoDashboard"
 DATA_DIR_NAME = "data"
 EXCEL_FILENAME = "schools.xlsx"
-CSV_SAMPLE_FILENAME = "schools.csv"
+CSV_FILENAME = "schools.csv"
+CSV_SAMPLE_FILENAME = CSV_FILENAME
 VERSION_FILENAME = "version.json"
 SCHOOLS_SHEET_NAME = "schools"
 REQUIRED_COLUMNS = ("school_id", "school_name")
 NOT_PROVIDED = "Not provided"
 
-# Placeholder raw GitHub URLs for v1. Replace OWNER/REPOSITORY/BRANCH with the
+# Placeholder raw GitHub URLs for v1. Replace OWNER/REPOSITORY with the
 # real repository path that will host public non-confidential school data.
 REMOTE_VERSION_URL = (
-    "https://raw.githubusercontent.com/OWNER/REPOSITORY/BRANCH/data/version.json"
+    "https://raw.githubusercontent.com/OWNER/REPOSITORY/main/data/version.json"
 )
-REMOTE_EXCEL_URL = (
-    "https://raw.githubusercontent.com/OWNER/REPOSITORY/BRANCH/data/schools.xlsx"
+REMOTE_DATA_URL = (
+    "https://raw.githubusercontent.com/OWNER/REPOSITORY/main/data/schools.csv"
 )
 
 DEFAULT_THEME = {

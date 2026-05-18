@@ -1,6 +1,6 @@
 # School Information Dashboard
 
-A branded, offline-first desktop dashboard for retrieving school information from an Excel file. v1 is built for **World of Swimming** using Python 3.11+, PySide6, pandas/openpyxl, requests, PyInstaller, Inno Setup, and macOS app/DMG build scripts.
+A branded, offline-first desktop dashboard for retrieving school information from cached school data. v1 is built for **World of Swimming** using Python 3.11+, PySide6, pandas/openpyxl, requests, PyInstaller, Inno Setup, and macOS app/DMG build scripts.
 
 ## What the App Does
 
@@ -12,8 +12,8 @@ A branded, offline-first desktop dashboard for retrieving school information fro
 - Converts labels such as `opening_times` to `Opening Times`.
 - Displays blank optional values as `Not provided`.
 - Makes email and website values clickable where practical.
-- Can manually check GitHub raw URLs for updated Excel data.
-- Validates downloaded Excel data before replacing the local cache.
+- Can manually check GitHub raw URLs for updated CSV school data.
+- Validates downloaded CSV data and generated Excel runtime data before replacing the local cache.
 
 ## Branding
 
@@ -38,8 +38,8 @@ Theme colours:
 ```text
 app/                         Python application package
 assets/                      Branding and icon assets
-data/                        CSV sample data, version file, and data placeholder docs
-docs/EXCEL_FORMAT.md         Excel editing guide
+data/                        Source-controlled CSV school data, version file, and data docs
+docs/EXCEL_FORMAT.md         CSV school-data editing guide
 installer/                   Windows Inno Setup and macOS DMG config
 tests/                       Data loading and sync safety tests
 build_exe.bat                Windows PyInstaller build
@@ -49,9 +49,9 @@ build_macos_dmg.sh           macOS DMG build
 requirements.txt             Runtime/build/test dependencies
 ```
 
-## Excel Data
+## School Data
 
-Production workbooks must be named `schools.xlsx` and contain a sheet named `schools`. The repository commits `data/schools.csv` instead of a binary Excel workbook; `python -m app.sample_excel` generates a local ignored `data/schools.xlsx` for builds when needed.
+Source-controlled school data lives in `data/schools.csv`. The app keeps a local cached runtime workbook named `schools.xlsx`; `python -m app.sample_excel` can generate a local ignored `data/schools.xlsx` for builds or manual validation when needed. To publish a school-data update, edit `data/schools.csv` and bump `data/version.json`.
 
 Required columns:
 
@@ -71,7 +71,7 @@ Recommended columns:
 - `after_school_club`
 - `notes`
 
-See [docs/EXCEL_FORMAT.md](docs/EXCEL_FORMAT.md) for the full editing guide and data safety warning. Do not store confidential, safeguarding, pupil-sensitive, or staff-sensitive data in GitHub-hosted files.
+See [docs/EXCEL_FORMAT.md](docs/EXCEL_FORMAT.md) for the full CSV editing guide and data safety warning. Do not store confidential, safeguarding, pupil-sensitive, or staff-sensitive data in GitHub-hosted files.
 
 ## Offline Cache Locations
 
@@ -87,7 +87,7 @@ Startup flow:
 
 1. Resolve the platform-specific cache directory.
 2. Create the cache directory if needed.
-3. Copy bundled `data/schools.xlsx` into cache if present; otherwise generate it from committed `data/schools.csv`.
+3. Copy bundled `data/schools.xlsx` into cache if present; otherwise generate cached `schools.xlsx` from committed `data/schools.csv`.
 4. Copy bundled `data/version.json` into cache if missing.
 5. Load cached Excel data.
 6. Display the dashboard immediately.
@@ -98,18 +98,19 @@ Startup flow:
 Remote URLs are configured in `app/config.py`:
 
 - `REMOTE_VERSION_URL`
-- `REMOTE_EXCEL_URL`
+- `REMOTE_DATA_URL`
 
-They currently contain placeholder raw GitHub URLs. Before real update distribution, replace `OWNER/REPOSITORY/BRANCH` with the approved repository and branch that host non-confidential school data.
+They currently contain placeholder raw GitHub URLs on the `main` branch. Before real update distribution, replace `OWNER/REPOSITORY` with the approved repository that hosts non-confidential school data.
 
 Sync behaviour:
 
 1. Download remote `version.json`.
 2. Compare remote `data_version` with the cached version.
-3. Download remote `schools.xlsx` only when versions differ.
-4. Validate the downloaded Excel file.
-5. Replace cached files only after validation succeeds.
-6. Keep existing cached data if any step fails.
+3. Download remote `schools.csv` only when versions differ.
+4. Validate the downloaded CSV file.
+5. Generate a temporary `schools.xlsx` runtime workbook and validate it.
+6. Replace cached files only after validation succeeds.
+7. Keep existing cached data if any step fails.
 
 ## Run From Source
 
@@ -188,7 +189,7 @@ macOS app and DMG builds must be produced on macOS. The v1 scripts do not perfor
 
 - Place final approved World of Swimming logo/icon files locally in `assets/` before production builds.
 - Replace placeholder GitHub raw URLs in `app/config.py`.
-- Review `data/schools.csv` and generate or provide approved non-confidential `schools.xlsx` data for releases.
+- Review and update approved non-confidential school data in `data/schools.csv`, then bump `data/version.json`.
 - Produce Windows builds on Windows and macOS builds on macOS.
 - Upload built `.exe`, installer, and `.dmg` artifacts to GitHub Releases; do not commit them.
 - Add code signing/notarisation if required for managed distribution.

@@ -90,3 +90,63 @@ def test_sync_failure_does_not_delete_existing_cached_data(tmp_path, sample_exce
     assert excel_path.exists()
     assert version_path.exists()
     assert json.loads(version_path.read_text(encoding="utf-8"))["data_version"] == "local"
+
+
+def test_valid_sample_csv_loads():
+    from app.data_loader import load_schools_csv
+
+    data = load_schools_csv(SAMPLE_CSV)
+    records = dataframe_to_school_records(data)
+    assert len(records) >= 3
+    assert records[0]["school_id"] == "SCH001"
+    assert records[0]["school_name"] == "Bluewater Primary School"
+
+
+def test_sync_downloads_csv_and_generates_cached_excel(tmp_path, sample_excel: Path, monkeypatch):
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    excel_path = cache_dir / config.EXCEL_FILENAME
+    version_path = cache_dir / config.VERSION_FILENAME
+    shutil.copy2(sample_excel, excel_path)
+    version_path.write_text(json.dumps({"data_version": "local", "updated_at": "2026-05-18"}), encoding="utf-8")
+
+    remote_version = {"data_version": "remote", "updated_at": "2026-05-19", "data_file": "schools.csv"}
+    csv_bytes = SAMPLE_CSV.read_bytes()
+
+    class DummyResponse:
+        def __init__(self, *, json_data=None, content=b"", text=""):
+            self._json_data = json_data
+            self.content = content
+            self.text = text
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._json_data
+
+    class DummyRequests:
+        class RequestException(Exception):
+            pass
+
+        def get(self, url, timeout):
+            if url.endswith("version.json"):
+                return DummyResponse(json_data=remote_version, text=json.dumps(remote_version))
+            if url.endswith("schools.csv"):
+                return DummyResponse(content=csv_bytes, text=csv_bytes.decode("utf-8"))
+            raise AssertionError(f"unexpected URL: {url}")
+
+    import app.sync as sync_module
+
+    monkeypatch.setattr(sync_module, "requests", DummyRequests())
+
+    result = check_for_updates(
+        cache_dir,
+        remote_version_url="https://example.test/data/version.json",
+        remote_data_url="https://example.test/data/schools.csv",
+    )
+
+    assert result.updated is True
+    assert json.loads(version_path.read_text(encoding="utf-8"))["data_file"] == "schools.csv"
+    records = dataframe_to_school_records(load_schools_excel(excel_path))
+    assert records[0]["school_name"] == "Bluewater Primary School"
