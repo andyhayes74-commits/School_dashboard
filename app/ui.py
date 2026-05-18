@@ -144,6 +144,11 @@ class MainWindow(QMainWindow):
         controls.setColumnStretch(1, 1)
         content.addLayout(controls)
 
+        self.status_meta = QLabel("Data version: Loading | Last updated: Loading")
+        self.status_meta.setObjectName("statusMeta")
+        self.status_meta.setWordWrap(True)
+        content.addWidget(self.status_meta)
+
         self.school_title = QLabel("Select a school")
         self.school_title.setObjectName("schoolTitle")
         content.addWidget(self.school_title)
@@ -372,7 +377,3 @@ def run_app(cache_dir: Path, theme: dict[str, str]) -> int:
     window = MainWindow(cache_dir, theme)
     window.show()
     return app.exec()
-        self.status_meta = QLabel("Data version: Loading | Last updated: Loading")
-        self.status_meta.setObjectName("statusMeta")
-        self.status_meta.setWordWrap(True)
-        content.addWidget(self.status_meta)
