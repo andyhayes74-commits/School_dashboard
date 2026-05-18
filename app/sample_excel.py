@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import csv
 import re
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -19,11 +18,15 @@ def generate_sample_xlsx(csv_path: Path, xlsx_path: Path) -> Path:
     if not csv_path.exists():
         raise FileNotFoundError(f"Sample CSV file is missing: {csv_path}")
 
-    with csv_path.open("r", encoding="utf-8-sig", newline="") as handle:
-        rows = list(csv.reader(handle))
+    # Validate the CSV before producing a runtime workbook so invalid source
+    # data never reaches the cache. Import lazily to avoid a module import cycle.
+    from app.data_loader import dataframe_to_school_records, load_schools_csv
 
-    if not rows:
-        raise ValueError(f"Sample CSV file is empty: {csv_path}")
+    validated_data = load_schools_csv(csv_path)
+    records = dataframe_to_school_records(validated_data)
+    columns = list(validated_data.columns)
+    rows = [columns]
+    rows.extend([record.get(column, config.NOT_PROVIDED) for column in columns] for record in records)
 
     xlsx_path.parent.mkdir(parents=True, exist_ok=True)
     with ZipFile(xlsx_path, "w", ZIP_DEFLATED) as archive:
