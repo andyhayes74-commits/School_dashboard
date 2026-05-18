@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 APP_NAME = "School Information Dashboard"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 AUTO_CHECK_SOFTWARE_UPDATES = True
 GITHUB_RELEASES_API_URL = "https://api.github.com/repos/OWNER/REPOSITORY/releases/latest"
 WINDOWS_INSTALLER_NAME = "SchoolInformationDashboardSetup.exe"
