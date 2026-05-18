@@ -5,9 +5,6 @@ installer_output/
 *.msi
 *.dmg
 *.app
-*.ico
-*.icns
-*.xlsx
 *.png
 *.jpg
 *.jpeg
