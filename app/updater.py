@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-import importlib
-import importlib.util
 import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import requests
 from app import config
-
-requests = importlib.import_module("requests") if importlib.util.find_spec("requests") else None
 
 
 @dataclass(frozen=True)
@@ -33,15 +30,25 @@ def check_for_software_update(
 ) -> SoftwareUpdateResult:
     if not config.AUTO_CHECK_SOFTWARE_UPDATES:
         return SoftwareUpdateResult(False, "Automatic software update checks are disabled.", current_version)
-    if requests is None:
-        return SoftwareUpdateResult(False, "Software update check unavailable offline. Continuing normally.", current_version)
+    if "OWNER" in releases_api_url or "REPOSITORY" in releases_api_url:
+        return SoftwareUpdateResult(
+            False,
+            "Software update check is misconfigured: invalid GitHub Releases URL placeholder.",
+            current_version,
+        )
 
     try:
         response = requests.get(releases_api_url, timeout=timeout)
+        if response.status_code == 403:
+            return SoftwareUpdateResult(
+                False,
+                "GitHub API rate limit reached. Please try again later.",
+                current_version,
+            )
         response.raise_for_status()
         release = _parse_latest_release(response.json(), platform_name)
         if not release:
-            return SoftwareUpdateResult(False, "No compatible installer found in latest release. Continuing normally.", current_version)
+            return SoftwareUpdateResult(False, "No compatible installer asset found for this platform in the latest release.", current_version)
 
         latest_version = release["version"]
         if not is_newer_version(latest_version, current_version):
@@ -55,8 +62,18 @@ def check_for_software_update(
             release["url"],
             release["name"],
         )
+    except requests.exceptions.ConnectionError as exc:
+        return SoftwareUpdateResult(False, f"No internet connection for software update check. Details: {exc}", current_version)
+    except requests.exceptions.Timeout as exc:
+        return SoftwareUpdateResult(False, f"GitHub API request timed out. Details: {exc}", current_version)
+    except requests.exceptions.HTTPError as exc:
+        return SoftwareUpdateResult(False, f"GitHub API request failed. Details: {exc}", current_version)
+    except ValueError as exc:
+        return SoftwareUpdateResult(False, f"GitHub API response could not be parsed. Details: {exc}", current_version)
+    except requests.exceptions.RequestException as exc:
+        return SoftwareUpdateResult(False, f"Software update check request failed. Details: {exc}", current_version)
     except Exception as exc:
-        return SoftwareUpdateResult(False, f"Software update check failed. Continuing normally. Details: {exc}", current_version)
+        return SoftwareUpdateResult(False, f"Software update check failed unexpectedly. Details: {exc}", current_version)
 
 
 def _parse_latest_release(payload: Any, platform_name: str) -> dict[str, str] | None:
@@ -97,8 +114,6 @@ def _version_tuple(version: str) -> tuple[int, int, int]:
 
 
 def download_installer(installer_url: str, destination: Path, timeout: int = 30) -> Path:
-    if requests is None:
-        raise RuntimeError("requests is not installed")
     response = requests.get(installer_url, timeout=timeout)
     response.raise_for_status()
     destination.parent.mkdir(parents=True, exist_ok=True)

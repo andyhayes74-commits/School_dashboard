@@ -89,39 +89,30 @@ class MainWindow(QMainWindow):
         header.setObjectName("header")
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(24, 18, 24, 18)
-        header_layout.setSpacing(16)
+        header_layout.setSpacing(24)
 
         logo = QLabel()
+        logo.setMinimumWidth(190)
+        logo.setMaximumWidth(240)
         logo_path = resource_path("assets", "logo.png")
         pixmap = QPixmap(str(logo_path)) if logo_path.exists() else QPixmap()
         if not pixmap.isNull():
-            logo.setPixmap(pixmap.scaled(58, 58, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            logo.setPixmap(pixmap.scaled(220, 90, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         else:
-            logo.setText(self.theme["company_name"])
+            logo.setText("Logo")
             logo.setObjectName("logoFallback")
+        logo.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         header_layout.addWidget(logo)
 
         title_block = QVBoxLayout()
-        company = QLabel(self.theme["company_name"])
-        company.setObjectName("company")
         title = QLabel(self.theme["app_title"])
         title.setObjectName("title")
         app_version = QLabel(f"Version {config.APP_VERSION}")
         app_version.setObjectName("appVersion")
-        title_block.addWidget(company)
         title_block.addWidget(title)
         title_block.addWidget(app_version)
+        title_block.setAlignment(Qt.AlignVCenter)
         header_layout.addLayout(title_block, 1)
-
-        self.version_label = QLabel("Data version: Loading")
-        self.updated_label = QLabel("Last updated: Loading")
-        self.cache_label = QLabel(f"Offline cache: {self.cache_dir}")
-        meta = QVBoxLayout()
-        for widget in (self.version_label, self.updated_label, self.cache_label):
-            widget.setObjectName("meta")
-            widget.setAlignment(Qt.AlignRight)
-            meta.addWidget(widget)
-        header_layout.addLayout(meta)
         layout.addWidget(header)
 
         content = QVBoxLayout()
@@ -241,9 +232,10 @@ class MainWindow(QMainWindow):
 
     def _load_version_metadata(self) -> None:
         version = load_json_file(self.cache_dir / config.VERSION_FILENAME)
-        self.version_label.setText(f"Data version: {version.get('data_version', 'Unknown')}")
-        self.updated_label.setText(f"Last updated: {version.get('updated_at', 'Unknown')}")
-        self.cache_label.setText(f"Offline cache: {self.cache_dir}")
+        data_version = version.get("data_version", "Unknown")
+        last_updated = version.get("updated_at", "Unknown")
+        self.status_meta.setText(f"Data version: {data_version} | Last updated: {last_updated}")
+        self.status_meta.setToolTip(f"Offline cache: {self.cache_dir}")
 
     def _apply_filter(self) -> None:
         query = self.search_box.text().strip().lower() if hasattr(self, "search_box") else ""
@@ -356,11 +348,10 @@ class MainWindow(QMainWindow):
         QTextEdit, QTextBrowser {{ background: transparent; border: none; }}
         QFrame {{ background-color: transparent; }}
         #header {{ background: {primary}; color: white; }}
-        #company {{ color: #DCE7FF; font-size: 14px; font-weight: 600; }}
-        #title {{ color: white; font-size: 26px; font-weight: 700; }}
-        #appVersion {{ color: #DCE7FF; font-size: 12px; font-weight: 600; }}
-        #meta {{ color: white; font-size: 12px; }}
-        #logoFallback {{ color: white; font-weight: 700; border: 1px solid white; padding: 10px; border-radius: 8px; }}
+        #title {{ color: white; font-size: 30px; font-weight: 700; }}
+        #appVersion {{ color: #DCE7FF; font-size: 14px; font-weight: 600; }}
+        #statusMeta {{ color: {text}; font-size: 12px; }}
+        #logoFallback {{ color: white; font-weight: 700; border: 1px solid white; padding: 12px; border-radius: 8px; }}
         QLineEdit, QComboBox {{ background: white; border: 1px solid #CBD5E1; border-radius: 6px; padding: 8px; }}
         QPushButton {{ background: {accent}; color: white; border: 0; border-radius: 6px; padding: 9px 14px; font-weight: 600; }}
         QPushButton:disabled {{ background: #94A3B8; }}
@@ -381,3 +372,7 @@ def run_app(cache_dir: Path, theme: dict[str, str]) -> int:
     window = MainWindow(cache_dir, theme)
     window.show()
     return app.exec()
+        self.status_meta = QLabel("Data version: Loading | Last updated: Loading")
+        self.status_meta.setObjectName("statusMeta")
+        self.status_meta.setWordWrap(True)
+        content.addWidget(self.status_meta)
