@@ -183,7 +183,32 @@ Expected output:
 installer_output/SchoolInformationDashboard-macOS.dmg
 ```
 
-macOS app and DMG builds must be produced on macOS. The v1 scripts do not perform code signing or notarisation. Unsigned apps may trigger Gatekeeper warnings; production distribution should add proper Apple Developer ID signing and notarisation later.
+macOS app and DMG builds must be produced on macOS. The v1 scripts and GitHub Actions workflow do not perform Apple code signing or notarisation. Unsigned apps may trigger Gatekeeper warnings; production distribution should add proper Apple Developer ID signing and notarisation later.
+
+## GitHub Actions Release Builds
+
+The repository includes `.github/workflows/build-release.yml` to build release installers without committing generated build outputs. The workflow runs in two ways:
+
+- Manually from the GitHub Actions **Build Release Installers** workflow using `workflow_dispatch`.
+- Automatically when a version tag matching `v*` is pushed, for example `v1.0.0`.
+
+The workflow builds and uploads these artifacts:
+
+| Platform | Runner | Output artifact |
+|---|---|---|
+| Windows | `windows-latest` | `installer_output/SchoolInformationDashboardSetup.exe` |
+| macOS | `macos-latest` | `installer_output/SchoolInformationDashboard-macOS.dmg` |
+
+For tag builds, GitHub Actions also creates a GitHub Release for the tag and attaches both installer files. Manual runs upload artifacts to the workflow run but do not create a release.
+
+To publish a tagged release:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Do not commit `dist/`, `build/`, `installer_output/`, `.exe`, `.dmg`, `.app`, or generated `.xlsx` files; they are ignored build/runtime outputs. The macOS app and DMG produced by this workflow are unsigned unless Apple Developer ID signing and notarisation are added later.
 
 ## Manual Steps Before Production
 
