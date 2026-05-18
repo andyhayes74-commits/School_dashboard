@@ -10,11 +10,16 @@ The application must work offline using a local cached copy of the data. When in
 
 ## Project Goal
 
-Build a complete Windows `.exe` application in one pass.
+Build a complete Windows desktop application with both:
+
+1. A standalone Windows `.exe` build.
+2. A proper Windows installer for non-technical users.
 
 The application should:
 
 - Open as a normal Windows desktop program.
+- Install through a standard Windows installer.
+- Create Start Menu and optional Desktop shortcuts.
 - Use a branded GUI with company logo and colours.
 - Load school data from an Excel file.
 - Let the user select a school from a dropdown.
@@ -38,6 +43,7 @@ Use:
 - openpyxl for reading Excel files
 - requests for GitHub data sync
 - PyInstaller for building the Windows `.exe`
+- Inno Setup for creating a Windows installer
 
 ---
 
@@ -62,10 +68,13 @@ school_dashboard/
 │  └─ version.json
 ├─ docs/
 │  └─ EXCEL_FORMAT.md
+├─ installer/
+│  └─ school_dashboard.iss
 ├─ tests/
 │  └─ test_data_loader.py
 ├─ requirements.txt
 ├─ build_exe.bat
+├─ build_installer.bat
 ├─ .gitignore
 └─ README.md
 ```
@@ -259,12 +268,61 @@ dist/SchoolInformationDashboard.exe
 
 ---
 
+## Installer Requirements
+
+The project must also produce a proper Windows installer.
+
+Recommended installer tool:
+
+```text
+Inno Setup
+```
+
+Include:
+
+```text
+installer/school_dashboard.iss
+build_installer.bat
+```
+
+The installer should:
+
+- Install the app into Program Files by default.
+- Use the branded app icon.
+- Create a Start Menu shortcut.
+- Offer an optional Desktop shortcut.
+- Include the built application files from `/dist`.
+- Include bundled fallback data and branding assets.
+- Preserve user cached data in AppData during upgrades.
+- Provide an uninstall entry in Windows Apps/Programs.
+- Use a clear app name: `School Information Dashboard`.
+- Use a clear publisher placeholder in the installer script.
+- Output installer file into `/installer_output`.
+
+Expected installer output:
+
+```text
+installer_output/SchoolInformationDashboardSetup.exe
+```
+
+Installer notes:
+
+- App data must remain in `%LOCALAPPDATA%\SchoolInfoDashboard\data`.
+- Do not store user cache inside Program Files.
+- Installing a new version should not delete cached school data.
+- The installer should support clean uninstall of program files while leaving cached data unless explicitly documented otherwise.
+
+---
+
 ## Acceptance Criteria
 
 The build is complete when:
 
 - The app launches from Python.
 - The app can be packaged as a Windows `.exe`.
+- A Windows installer can be built.
+- The installer installs the app successfully.
+- The installed app launches from the Start Menu.
 - Sample school data loads successfully.
 - The dropdown populates from Excel.
 - Selecting a school updates the dashboard.
@@ -282,5 +340,6 @@ The build is complete when:
 - Do not add databases for v1.
 - Do not require user login.
 - Build for Windows first.
+- Include both `.exe` and installer build paths.
 - Prioritise reliability over visual complexity.
 - Keep the code modular and maintainable.
