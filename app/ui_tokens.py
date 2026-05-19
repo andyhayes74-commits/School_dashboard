@@ -22,6 +22,7 @@ class UITokens:
     border_default: str
     action_brand: str
     action_brand_hover: str
+    action_brand_pressed: str
     status_success_bg: str
     status_success_fg: str
     status_info_bg: str
@@ -62,6 +63,7 @@ def build_tokens(theme: dict[str, str], dark_mode: bool = False) -> UITokens:
             border_default="#475569",
             action_brand="#60A5FA",
             action_brand_hover=merged["accent_colour"],
+            action_brand_pressed="#2563EB",
             status_success_bg="#064E3B",
             status_success_fg="#D1FAE5",
             status_info_bg="#1E3A8A",
@@ -96,6 +98,7 @@ def build_tokens(theme: dict[str, str], dark_mode: bool = False) -> UITokens:
         border_default="#CBD5E1",
         action_brand=merged["accent_colour"],
         action_brand_hover=merged["primary_colour"],
+        action_brand_pressed="#1D4ED8",
         status_success_bg="#ECFDF3",
         status_success_fg="#166534",
         status_info_bg="#EFF6FF",
