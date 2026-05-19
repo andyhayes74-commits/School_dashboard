@@ -92,16 +92,29 @@ class MainWindow(QMainWindow):
     def _build_dashboard_tab(self) -> QWidget:
         page = QWidget(); container_layout = QVBoxLayout(page); container_layout.setContentsMargins(24, 20, 24, 24); container_layout.setSpacing(16)
         self.status_banner = QLabel("Loading cached school data..."); self.status_banner.setObjectName("statusBanner"); self.status_banner.setWordWrap(True); container_layout.addWidget(self.status_banner)
-        toolbar = QFrame(); toolbar.setObjectName("toolbar"); controls = QGridLayout(toolbar); controls.setContentsMargins(16, 14, 16, 14); controls.setHorizontalSpacing(12)
+        self.selector_toolbar = QFrame(); self.selector_toolbar.setObjectName("toolbar"); controls = QGridLayout(self.selector_toolbar); controls.setContentsMargins(16, 14, 16, 14); controls.setHorizontalSpacing(12)
         self.search_box = QLineEdit(); self.search_box.setPlaceholderText("Search by school name or displayed information"); self.search_box.textChanged.connect(self._apply_filter)
         self.school_combo = QComboBox(); self.school_combo.currentIndexChanged.connect(self._display_selected_school)
         controls.addWidget(QLabel("Search"), 0, 0); controls.addWidget(self.search_box, 0, 1); controls.addWidget(QLabel("School"), 1, 0); controls.addWidget(self.school_combo, 1, 1); controls.setColumnStretch(1, 1)
-        container_layout.addWidget(toolbar)
+        container_layout.addWidget(self.selector_toolbar)
+
+        self.collapsed_selector_bar = QFrame(); self.collapsed_selector_bar.setObjectName("collapsedSelectorBar")
+        collapsed_layout = QHBoxLayout(self.collapsed_selector_bar); collapsed_layout.setContentsMargins(12, 8, 12, 8); collapsed_layout.setSpacing(10)
+        summary = QVBoxLayout(); summary.setSpacing(1)
+        self.collapsed_school_name = QLabel("No school selected"); self.collapsed_school_name.setObjectName("collapsedSchoolName")
+        self.collapsed_meta = QLabel("Data version: Loading | Last updated: Loading"); self.collapsed_meta.setObjectName("statusMeta")
+        summary.addWidget(self.collapsed_school_name); summary.addWidget(self.collapsed_meta)
+        self.change_school_button = QPushButton("Change school"); self.change_school_button.setObjectName("changeSchoolButton"); self.change_school_button.clicked.connect(self._on_change_school_clicked)
+        collapsed_layout.addLayout(summary, 1); collapsed_layout.addWidget(self.change_school_button, 0, Qt.AlignVCenter)
+        self.collapsed_selector_bar.hide(); container_layout.addWidget(self.collapsed_selector_bar)
         self.status_meta = QLabel("Data version: Loading | Last updated: Loading"); self.status_meta.setObjectName("statusMeta"); container_layout.addWidget(self.status_meta)
         self.school_title = QLabel("Select a school"); self.school_title.setObjectName("schoolTitle"); container_layout.addWidget(self.school_title)
-        scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.NoFrame)
+        self.dashboard_scroll_area = QScrollArea(); self.dashboard_scroll_area.setWidgetResizable(True); self.dashboard_scroll_area.setFrameShape(QFrame.NoFrame)
         self.cards_container = QWidget(); self.cards_layout = QGridLayout(self.cards_container); self.cards_layout.setHorizontalSpacing(16); self.cards_layout.setVerticalSpacing(16)
-        scroll.setWidget(self.cards_container); container_layout.addWidget(scroll, 1)
+        self.dashboard_scroll_area.setWidget(self.cards_container); container_layout.addWidget(self.dashboard_scroll_area, 1)
+        self.dashboard_scrollbar = self.dashboard_scroll_area.verticalScrollBar()
+        self.dashboard_scrollbar.valueChanged.connect(self._on_dashboard_scroll)
+        self.selector_collapsed = False
         return page
 
     def _build_settings_tab(self) -> QWidget:
@@ -183,6 +196,8 @@ class MainWindow(QMainWindow):
     def _load_version_metadata(self) -> None:
         version = load_json_file(self.cache_dir / config.VERSION_FILENAME); dv = version.get("data_version", "Unknown"); lu = version.get("updated_at", "Unknown")
         self.status_meta.setText(f"Data version: {dv} | Last updated: {lu}")
+        if hasattr(self, "collapsed_meta"):
+            self.collapsed_meta.setText(f"Data version: {dv} | Last updated: {lu}")
         self.cache_meta.setText(f"Data version: {dv} | Last updated: {lu}\nCache location: {self.cache_dir}")
 
     def _set_status(self, message: str, level: str) -> None:
@@ -197,9 +212,33 @@ class MainWindow(QMainWindow):
 
     def _display_selected_school(self) -> None:
         record = self.school_combo.currentData(); self._clear_cards()
-        if not record: self.school_title.setText("No matching school found"); self.cards_layout.addWidget(QLabel("Try a different search term or reload the cached data."), 0, 0); return
-        self.school_title.setText(record.get("school_name", "Selected school")); grouped = self._group_fields(record)
+        if not record:
+            self.school_title.setText("No matching school found"); self.collapsed_school_name.setText("No school selected")
+            self.cards_layout.addWidget(QLabel("Try a different search term or reload the cached data."), 0, 0); self._set_selector_collapsed(False); return
+        school_name = record.get("school_name", "Selected school")
+        self.school_title.setText(school_name); self.collapsed_school_name.setText(school_name)
+        grouped = self._group_fields(record)
         for idx, category in enumerate(self.CATEGORY_ORDER): self.cards_layout.addWidget(self._make_category_card(category, grouped[category]), *divmod(idx, 2))
+        self._on_dashboard_scroll(self.dashboard_scrollbar.value() if hasattr(self, "dashboard_scrollbar") else 0)
+
+
+    def _selected_school_exists(self) -> bool:
+        return bool(self.school_combo.currentData()) if hasattr(self, "school_combo") else False
+
+    def _should_collapse_selector(self, scroll_value: int) -> bool:
+        return self._selected_school_exists() and scroll_value > 40
+
+    def _set_selector_collapsed(self, collapsed: bool) -> None:
+        self.selector_collapsed = collapsed
+        self.selector_toolbar.setVisible(not collapsed)
+        self.collapsed_selector_bar.setVisible(collapsed)
+
+    def _on_dashboard_scroll(self, value: int) -> None:
+        self._set_selector_collapsed(self._should_collapse_selector(value))
+
+    def _on_change_school_clicked(self) -> None:
+        self._set_selector_collapsed(False)
+        self.search_box.setFocus()
 
     def _group_fields(self, record: dict[str, str]) -> dict[str, list[tuple[str, str]]]:
         grouped = {name: [] for name in self.CATEGORY_ORDER}
@@ -254,6 +293,9 @@ class MainWindow(QMainWindow):
         #statusBanner[level="success"] {{ background: {t.status_success_bg}; color: {t.status_success_fg}; }}
         #statusBanner[level="warning"] {{ background: {t.status_warning_bg}; color: {t.status_warning_fg}; }}
         #schoolTitle {{ font-size: 28px; font-weight: 600; }} #categoryTitle {{ color: {self.theme['primary_colour']}; font-size: 16px; font-weight: 600; }}
+        #collapsedSelectorBar {{ background: {t.surface_default}; border: 1px solid {t.border_subtle}; border-radius: {t.radius_md}px; min-height: 48px; max-height: 56px; }}
+        #collapsedSchoolName {{ font-size: 15px; font-weight: 600; color: {t.text_primary}; }}
+        #changeSchoolButton {{ padding: 7px 12px; }}
         #cardLabel {{ color: {t.text_tertiary}; font-size: 12px; font-weight: 600; }} #fieldRow {{ border-bottom: 1px solid {t.border_subtle}; }}
         """
 
