@@ -67,12 +67,19 @@ class MainWindow(QMainWindow):
     def _build_ui(self) -> None:
         root = QWidget(); self.setCentralWidget(root)
         layout = QVBoxLayout(root); layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(0)
-        accent = QFrame(); accent.setObjectName("headerAccent"); accent.setFixedHeight(4); layout.addWidget(accent)
-        header = QFrame(); header.setObjectName("header"); header_layout = QHBoxLayout(header); header_layout.setContentsMargins(24, 14, 24, 14)
-        logo = QLabel(); logo.setMinimumWidth(240)
+        header = QFrame(); header.setObjectName("header"); header.setMinimumHeight(120)
+        header_layout = QHBoxLayout(header); header_layout.setContentsMargins(24, 16, 24, 16)
+        logo = QLabel(); logo.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        logo.setMinimumSize(220, 64); logo.setMaximumSize(320, 88)
         pixmap = QPixmap(str(resource_path("assets", "logo.png")))
-        if not pixmap.isNull(): logo.setPixmap(pixmap.scaled(260, 104, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        else: logo.setText("Logo"); logo.setObjectName("logoFallback")
+        if not pixmap.isNull():
+            logo.setPixmap(pixmap.scaled(320, 88, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            logo.setText("Logo")
+            logo.setObjectName("logoFallback")
+            logo.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            logo.setMinimumSize(220, 64)
+            logo.setMaximumSize(320, 88)
         header_layout.addWidget(logo); header_layout.addStretch(1); layout.addWidget(header)
 
         self.tabs = QTabWidget(); self.tabs.setObjectName("mainTabs")
@@ -232,8 +239,8 @@ class MainWindow(QMainWindow):
         QMainWindow, QWidget {{ background: {t.canvas_surface}; color: {t.text_primary}; font-family: {t.font_family}; font-size: 14px; }}
         QLabel {{ background: transparent; border: none; }}
         QFrame {{ background-color: transparent; }}
-        #headerAccent {{ background: {self.theme['primary_colour']}; }}
-        #header {{ background: {t.surface_default}; border-bottom: 1px solid {t.border_subtle}; min-height: 76px; max-height: 84px; }}
+        #header {{ background: {self.theme['primary_colour']}; border-bottom: 1px solid {t.action_brand_pressed}; min-height: 120px; }}
+        #logoFallback {{ color: {t.text_inverse}; border: 1px solid {t.text_inverse}; border-radius: {t.radius_md}px; padding: 6px 10px; font-weight: 600; }}
         #mainTabs::pane {{ border: none; }}
         QTabBar::tab {{ background: {t.surface_raised}; border: 1px solid {t.border_subtle}; padding: 8px 14px; margin-right: 4px; border-top-left-radius: {t.radius_md}px; border-top-right-radius: {t.radius_md}px; }}
         QTabBar::tab:selected {{ background: {t.surface_default}; border-color: {t.border_default}; }}
