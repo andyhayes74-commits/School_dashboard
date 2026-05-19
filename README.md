@@ -185,13 +185,13 @@ installer_output/SchoolInformationDashboard-macOS.dmg
 
 macOS app and DMG builds must be produced on macOS. The v1 scripts and GitHub Actions workflow do not perform Apple code signing or notarisation. Unsigned apps may trigger Gatekeeper warnings; production distribution should add proper Apple Developer ID signing and notarisation later.
 
-## Software Updates (v1.2.4+)
+## Software Updates (v1.2.5+)
 
 The app now supports GitHub Releases-based software update checks for installer-driven upgrades (no silent in-place binary replacement).
 
 Configuration lives in `app/config.py`:
 
-- `APP_VERSION` (current installed app version, set to `1.2.4` for this release)
+- `APP_VERSION` (current installed app version, set to `1.2.5` for this release)
 - `AUTO_CHECK_SOFTWARE_UPDATES = True`
 - `GITHUB_RELEASES_API_URL` (GitHub Releases latest API endpoint)
 
@@ -215,14 +215,14 @@ Cached school data remains in the user cache directory and is not deleted during
 3. Drag **School Information Dashboard** into **Applications**.
 4. If macOS blocks the app on first launch, right-click the app in Applications and choose **Open**.
 
-> **Important hotfix note:** v1.2.1 has a broken updater configuration (placeholder GitHub Releases URL and packaged import behavior risk). Install v1.2.4 manually once. After v1.2.4 is installed, future releases (for example v1.2.4 and v1.3.0) are detected automatically via GitHub Releases.
+> **Important hotfix note:** v1.2.1 has a broken updater configuration (placeholder GitHub Releases URL and packaged import behavior risk). Install v1.2.5 manually once. After v1.2.5 is installed, future releases (for example v1.2.5 and v1.3.0) are detected automatically via GitHub Releases.
 
 ## GitHub Actions Release Builds
 
 The repository includes `.github/workflows/build-release.yml` to build release installers without committing generated build outputs. The workflow runs in three ways:
 
 - Automatically when changes are pushed to `main`: reads the repo-root `VERSION` file, creates/updates tag `v<VERSION>`, then creates/updates the GitHub Release from that tag.
-- Automatically when a version tag matching `v*` is pushed, for example `v1.2.4`: builds and publishes that tag's release assets.
+- Automatically when a version tag matching `v*` is pushed, for example `v1.2.5`: builds and publishes that tag's release assets.
 - Manually from GitHub Actions using `workflow_dispatch`: builds artifacts only by default; only creates/updates a release when `release_version` input is provided.
 
 The workflow builds and uploads these artifacts:
@@ -243,8 +243,8 @@ Release flow:
 To publish a tagged release:
 
 ```bash
-git tag v1.2.4
-git push origin v1.2.4
+git tag v1.2.5
+git push origin v1.2.5
 ```
 
 Do not commit `dist/`, `build/`, `installer_output/`, `.exe`, `.dmg`, `.app`, or generated `.xlsx` files; they are ignored build/runtime outputs. The macOS app and DMG produced by this workflow are unsigned unless Apple Developer ID signing and notarisation are added later.
@@ -261,4 +261,4 @@ Do not commit `dist/`, `build/`, `installer_output/`, `.exe`, `.dmg`, `.app`, or
 
 ### VERSION file
 
-The repository root `VERSION` file must contain the current application version (for example `1.2.4`). Main-branch release automation reads this file and uses it to manage the `v<VERSION>` tag before publishing/updating the GitHub Release.
+The repository root `VERSION` file must contain the current application version (for example `1.2.5`). Main-branch release automation reads this file and uses it to manage the `v<VERSION>` tag before publishing/updating the GitHub Release.
