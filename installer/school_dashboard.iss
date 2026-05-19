@@ -1,5 +1,5 @@
 #define MyAppName "School Information Dashboard"
-#define MyAppVersion "1.2.5"
+#define MyAppVersion "1.2.6"
 #define MyAppPublisher "World of Swimming"
 #define MyAppExeName "SchoolInformationDashboard.exe"
 
