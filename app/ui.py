@@ -1,57 +1,36 @@
 """PySide6 user interface for the dashboard."""
-
 from __future__ import annotations
 
-from pathlib import Path
 import platform
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QDesktopServices, QIcon, QPixmap
-from PySide6.QtWidgets import (
-    QApplication,
-    QComboBox,
-    QFrame,
-    QGridLayout,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QMainWindow,
-    QPushButton,
-    QScrollArea,
-    QSizePolicy,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton, QScrollArea, QSizePolicy, QTabWidget, QVBoxLayout, QWidget
 
 from app import config
 from app.data_loader import DataValidationError, dataframe_to_school_records, load_schools_excel
 from app.sync import SyncResult, check_for_updates
 from app.ui_tokens import UITokens, build_tokens
 from app.updater import SoftwareUpdateResult, check_for_software_update, download_installer, install_downloaded_update
+from app.user_settings import load_user_settings, save_user_settings
 from app.utils import is_probable_email, load_json_file, normalise_url, readable_label, resource_path
+
+
 
 
 class SyncWorker(QThread):
     completed = Signal(object)
-
     def __init__(self, cache_dir: Path):
-        super().__init__()
-        self.cache_dir = cache_dir
-
-    def run(self) -> None:
-        self.completed.emit(check_for_updates(self.cache_dir))
+        super().__init__(); self.cache_dir = cache_dir
+    def run(self) -> None: self.completed.emit(check_for_updates(self.cache_dir))
 
 
 class SoftwareUpdateWorker(QThread):
     completed = Signal(object)
-
     def __init__(self, current_version: str, platform_name: str):
-        super().__init__()
-        self.current_version = current_version
-        self.platform_name = platform_name
-
-    def run(self) -> None:
-        self.completed.emit(check_for_software_update(self.current_version, self.platform_name))
+        super().__init__(); self.current_version = current_version; self.platform_name = platform_name
+    def run(self) -> None: self.completed.emit(check_for_software_update(self.current_version, self.platform_name))
 
 
 class MainWindow(QMainWindow):
@@ -61,325 +40,216 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.cache_dir = cache_dir
         self.theme = {**config.DEFAULT_THEME, **theme}
-        self.tokens: UITokens = build_tokens(theme)
+        self.settings_path = self.cache_dir / "user_settings.json"
+        self.user_settings = self._load_user_settings()
+        self.tokens: UITokens = build_tokens(theme, self.user_settings["dark_mode"])
         self.records: list[dict[str, str]] = []
         self.filtered_records: list[dict[str, str]] = []
         self.sync_worker: SyncWorker | None = None
         self.software_worker: SoftwareUpdateWorker | None = None
         self.platform_name = platform.system()
         self.installer_path: Path | None = None
+        self.latest_version_text = "Unknown"
 
         self.setWindowTitle(f"{self.theme['app_title']} - Version {config.APP_VERSION}")
         icon_path = resource_path("assets", "app_icon.ico")
-        if icon_path.exists():
-            self.setWindowIcon(QIcon(str(icon_path)))
+        if icon_path.exists(): self.setWindowIcon(QIcon(str(icon_path)))
         self.resize(1080, 760)
+        self._build_ui(); self.reload_data(show_success=False)
+        if config.AUTO_CHECK_SOFTWARE_UPDATES: self.check_software_updates()
 
-        self._build_ui()
-        self.reload_data(show_success=False)
-        if config.AUTO_CHECK_SOFTWARE_UPDATES:
-            self.check_software_updates()
+    def _load_user_settings(self) -> dict[str, bool]:
+        return load_user_settings(self.settings_path)
+
+    def _save_user_settings(self) -> None:
+        save_user_settings(self.settings_path, self.user_settings)
 
     def _build_ui(self) -> None:
-        root = QWidget()
-        self.setCentralWidget(root)
-        layout = QVBoxLayout(root)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        root = QWidget(); self.setCentralWidget(root)
+        layout = QVBoxLayout(root); layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(0)
+        accent = QFrame(); accent.setObjectName("headerAccent"); accent.setFixedHeight(4); layout.addWidget(accent)
+        header = QFrame(); header.setObjectName("header"); header_layout = QHBoxLayout(header); header_layout.setContentsMargins(24, 14, 24, 14)
+        logo = QLabel(); logo.setMinimumWidth(240)
+        pixmap = QPixmap(str(resource_path("assets", "logo.png")))
+        if not pixmap.isNull(): logo.setPixmap(pixmap.scaled(260, 104, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else: logo.setText("Logo"); logo.setObjectName("logoFallback")
+        header_layout.addWidget(logo); header_layout.addStretch(1); layout.addWidget(header)
 
-        accent = QFrame()
-        accent.setObjectName("headerAccent")
-        accent.setFixedHeight(4)
-        layout.addWidget(accent)
+        self.tabs = QTabWidget(); self.tabs.setObjectName("mainTabs")
+        layout.addWidget(self.tabs, 1)
+        self.tabs.addTab(self._build_dashboard_tab(), "Dashboard")
+        self.tabs.addTab(self._build_settings_tab(), "Settings")
+        self.tabs.setCurrentIndex(0)
+        self.apply_theme()
 
-        header = QFrame()
-        header.setObjectName("header")
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(24, 14, 24, 14)
-
-        logo = QLabel()
-        logo.setMinimumWidth(240)
-        logo_path = resource_path("assets", "logo.png")
-        pixmap = QPixmap(str(logo_path)) if logo_path.exists() else QPixmap()
-        if not pixmap.isNull():
-            logo.setPixmap(pixmap.scaled(260, 104, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        else:
-            logo.setText("Logo")
-            logo.setObjectName("logoFallback")
-        logo.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        header_layout.addWidget(logo)
-        header_layout.addStretch(1)
-        layout.addWidget(header)
-
-        container = QFrame()
-        container_layout = QVBoxLayout(container)
-        container_layout.setContentsMargins(24, 20, 24, 24)
-        container_layout.setSpacing(16)
-        layout.addWidget(container, 1)
-
-        self.status_banner = QLabel("Loading cached school data...")
-        self.status_banner.setObjectName("statusBanner")
-        self.status_banner.setWordWrap(True)
-        container_layout.addWidget(self.status_banner)
-
-        toolbar = QFrame()
-        toolbar.setObjectName("toolbar")
-        controls = QGridLayout(toolbar)
-        controls.setContentsMargins(16, 14, 16, 14)
-        controls.setHorizontalSpacing(12)
-        controls.setVerticalSpacing(8)
-        self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("Search by school name or displayed information")
-        self.search_box.textChanged.connect(self._apply_filter)
-        self.school_combo = QComboBox()
-        self.school_combo.currentIndexChanged.connect(self._display_selected_school)
-        self.install_update_button = QPushButton("Install update")
-        self.install_update_button.setEnabled(False)
-        self.install_update_button.clicked.connect(self.install_update)
-        controls.addWidget(QLabel("Search"), 0, 0)
-        controls.addWidget(self.search_box, 0, 1)
-        controls.addWidget(QLabel("School"), 1, 0)
-        controls.addWidget(self.school_combo, 1, 1)
-        controls.addWidget(self.install_update_button, 1, 2)
-        controls.setColumnStretch(1, 1)
+    def _build_dashboard_tab(self) -> QWidget:
+        page = QWidget(); container_layout = QVBoxLayout(page); container_layout.setContentsMargins(24, 20, 24, 24); container_layout.setSpacing(16)
+        self.status_banner = QLabel("Loading cached school data..."); self.status_banner.setObjectName("statusBanner"); self.status_banner.setWordWrap(True); container_layout.addWidget(self.status_banner)
+        toolbar = QFrame(); toolbar.setObjectName("toolbar"); controls = QGridLayout(toolbar); controls.setContentsMargins(16, 14, 16, 14); controls.setHorizontalSpacing(12)
+        self.search_box = QLineEdit(); self.search_box.setPlaceholderText("Search by school name or displayed information"); self.search_box.textChanged.connect(self._apply_filter)
+        self.school_combo = QComboBox(); self.school_combo.currentIndexChanged.connect(self._display_selected_school)
+        controls.addWidget(QLabel("Search"), 0, 0); controls.addWidget(self.search_box, 0, 1); controls.addWidget(QLabel("School"), 1, 0); controls.addWidget(self.school_combo, 1, 1); controls.setColumnStretch(1, 1)
         container_layout.addWidget(toolbar)
+        self.status_meta = QLabel("Data version: Loading | Last updated: Loading"); self.status_meta.setObjectName("statusMeta"); container_layout.addWidget(self.status_meta)
+        self.school_title = QLabel("Select a school"); self.school_title.setObjectName("schoolTitle"); container_layout.addWidget(self.school_title)
+        scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.NoFrame)
+        self.cards_container = QWidget(); self.cards_layout = QGridLayout(self.cards_container); self.cards_layout.setHorizontalSpacing(16); self.cards_layout.setVerticalSpacing(16)
+        scroll.setWidget(self.cards_container); container_layout.addWidget(scroll, 1)
+        return page
 
-        self.status_meta = QLabel("Data version: Loading | Last updated: Loading")
-        self.status_meta.setObjectName("statusMeta")
-        self.status_meta.setWordWrap(True)
-        container_layout.addWidget(self.status_meta)
+    def _build_settings_tab(self) -> QWidget:
+        page = QWidget(); layout = QVBoxLayout(page); layout.setContentsMargins(24, 20, 24, 24); layout.setSpacing(16)
+        self.application_card = self._create_settings_card("Application")
+        self.application_card.layout().addWidget(QLabel(f"App name: {config.APP_NAME}"))
+        self.application_card.layout().addWidget(QLabel(f"Company: {config.COMPANY_NAME}"))
+        self.application_card.layout().addWidget(QLabel(f"Current version: {config.APP_VERSION}"))
+        self.application_card.layout().addWidget(QLabel(f"Platform: {self.platform_name}"))
 
-        self.school_title = QLabel("Select a school")
-        self.school_title.setObjectName("schoolTitle")
-        container_layout.addWidget(self.school_title)
+        self.update_card = self._create_settings_card("Software Updates")
+        self.update_status = QLabel("Status: Waiting to check updates")
+        self.update_latest = QLabel("Latest version: Unknown")
+        self.update_source = QLabel(f"Source: {config.GITHUB_RELEASES_API_URL}"); self.update_source.setObjectName("statusMeta")
+        self.check_updates_button = QPushButton("Check for updates"); self.check_updates_button.clicked.connect(self.check_software_updates)
+        self.install_update_button = QPushButton("Install update"); self.install_update_button.setEnabled(False); self.install_update_button.clicked.connect(self.install_update)
+        self.update_card.layout().addWidget(QLabel(f"Current app version: {config.APP_VERSION}"))
+        self.update_card.layout().addWidget(self.update_latest); self.update_card.layout().addWidget(self.update_status)
+        btns = QHBoxLayout(); btns.addWidget(self.check_updates_button); btns.addWidget(self.install_update_button); btns.addStretch(1)
+        self.update_card.layout().addLayout(btns); self.update_card.layout().addWidget(self.update_source)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        self.cards_container = QWidget()
-        self.cards_layout = QGridLayout(self.cards_container)
-        self.cards_layout.setContentsMargins(0, 0, 0, 0)
-        self.cards_layout.setHorizontalSpacing(16)
-        self.cards_layout.setVerticalSpacing(16)
-        scroll.setWidget(self.cards_container)
-        container_layout.addWidget(scroll, 1)
+        self.appearance_card = self._create_settings_card("Appearance")
+        self.dark_mode_toggle = QCheckBox("Dark mode"); self.dark_mode_toggle.setChecked(self.user_settings["dark_mode"]); self.dark_mode_toggle.toggled.connect(self._toggle_dark_mode)
+        self.appearance_card.layout().addWidget(self.dark_mode_toggle)
 
+        self.cache_card = self._create_settings_card("Cache / Data")
+        self.cache_meta = QLabel(f"Cache location: {self.cache_dir}")
+        self.cache_card.layout().addWidget(self.cache_meta)
+
+        for card in (self.application_card, self.update_card, self.appearance_card, self.cache_card): layout.addWidget(card)
+        layout.addStretch(1); return page
+
+    def _create_settings_card(self, title: str) -> QFrame:
+        card = QFrame(); card.setObjectName("categoryCard"); lay = QVBoxLayout(card); lay.setContentsMargins(16, 16, 16, 16); lay.setSpacing(8)
+        lab = QLabel(title); lab.setObjectName("categoryTitle"); lay.addWidget(lab); return card
+
+    def apply_theme(self) -> None:
+        self.tokens = build_tokens(self.theme, self.user_settings["dark_mode"])
         self.setStyleSheet(self._stylesheet())
+
+    def _toggle_dark_mode(self, enabled: bool) -> None:
+        self.user_settings["dark_mode"] = enabled
+        self._save_user_settings()
+        self.apply_theme()
 
     def reload_data(self, show_success: bool) -> None:
         try:
-            df = load_schools_excel(self.cache_dir / config.EXCEL_FILENAME)
-            self.records = dataframe_to_school_records(df)
-            self._load_version_metadata()
-            self._apply_filter()
-            if show_success:
-                self._set_status("Cached data reloaded successfully.", "success")
-            else:
-                self._set_status("Showing cached school data. Internet is not required.", "success")
+            df = load_schools_excel(self.cache_dir / config.EXCEL_FILENAME); self.records = dataframe_to_school_records(df); self._load_version_metadata(); self._apply_filter()
+            self._set_status("Cached data reloaded successfully." if show_success else "Showing cached school data. Internet is not required.", "success")
         except DataValidationError as exc:
-            self.records = []
-            self._apply_filter()
-            self._set_status(str(exc), "error")
-
-    def check_updates(self) -> None:
-        if self.sync_worker and self.sync_worker.isRunning():
-            return
-        self._set_status("Checking GitHub for updated school data...", "info")
-        self.sync_worker = SyncWorker(self.cache_dir)
-        self.sync_worker.completed.connect(self._sync_finished)
-        self.sync_worker.start()
-
-    def _sync_finished(self, result: SyncResult) -> None:
-        self._set_status(result.message, "success" if result.updated else "info")
-        if result.updated:
-            self.reload_data(show_success=False)
-        if config.AUTO_CHECK_SOFTWARE_UPDATES:
-            self.check_software_updates()
+            self.records = []; self._apply_filter(); self._set_status(str(exc), "error")
 
     def check_software_updates(self) -> None:
-        if self.software_worker and self.software_worker.isRunning():
-            return
-        self._set_status("Checking for software updates from GitHub Releases...", "info")
+        if self.software_worker and self.software_worker.isRunning(): return
+        self.update_status.setText("Status: Checking for software updates...")
         self.software_worker = SoftwareUpdateWorker(config.APP_VERSION, self.platform_name)
-        self.software_worker.completed.connect(self._software_update_finished)
-        self.software_worker.start()
+        self.software_worker.completed.connect(self._software_update_finished); self.software_worker.start()
 
     def _software_update_finished(self, result: SoftwareUpdateResult) -> None:
+        self.latest_version_text = result.latest_version or "Unknown"
+        self.update_latest.setText(f"Latest version: {self.latest_version_text}")
         if result.update_available and result.installer_url and result.installer_name:
-            destination = self.cache_dir / result.installer_name
             try:
-                self.installer_path = download_installer(result.installer_url, destination)
+                self.installer_path = download_installer(result.installer_url, self.cache_dir / result.installer_name)
                 self.install_update_button.setEnabled(True)
-                self._set_status(
-                    f"{result.message} Downloaded to {self.installer_path}. Click Install update when ready.",
-                    "success",
-                )
+                self.update_status.setText(f"Status: Update available ({result.latest_version}). Installer downloaded.")
             except Exception as exc:
-                self.installer_path = None
-                self.install_update_button.setEnabled(False)
-                self._set_status(f"Update found but download failed. Continuing normally. Details: {exc}", "info")
+                self.installer_path = None; self.install_update_button.setEnabled(False); self.update_status.setText(f"Status: Update found but download failed: {exc}")
             return
-
-        self.installer_path = None
-        self.install_update_button.setEnabled(False)
-        self._set_status(result.message, "info")
+        self.installer_path = None; self.install_update_button.setEnabled(False); self.update_status.setText(f"Status: {result.message}")
 
     def install_update(self) -> None:
-        if not self.installer_path or not self.installer_path.exists():
-            self._set_status("No downloaded installer is available yet.", "info")
-            return
+        if not self.installer_path or not self.installer_path.exists(): self.update_status.setText("Status: No downloaded installer is available yet."); return
         try:
-            message = install_downloaded_update(self.platform_name, self.installer_path)
-            self._set_status(message, "success")
-            if self.platform_name == "Windows":
-                QApplication.instance().quit()
-        except Exception as exc:
-            self._set_status(f"Could not start installer. Continuing normally. Details: {exc}", "error")
+            message = install_downloaded_update(self.platform_name, self.installer_path); self.update_status.setText(f"Status: {message}")
+            if self.platform_name == "Windows": QApplication.instance().quit()
+        except Exception as exc: self.update_status.setText(f"Status: Could not start installer. Details: {exc}")
 
     def _load_version_metadata(self) -> None:
-        version = load_json_file(self.cache_dir / config.VERSION_FILENAME)
-        data_version = version.get("data_version", "Unknown")
-        last_updated = version.get("updated_at", "Unknown")
-        self.status_meta.setText(f"Data version: {data_version} | Last updated: {last_updated}")
-        self.status_meta.setToolTip(f"Offline cache: {self.cache_dir}")
+        version = load_json_file(self.cache_dir / config.VERSION_FILENAME); dv = version.get("data_version", "Unknown"); lu = version.get("updated_at", "Unknown")
+        self.status_meta.setText(f"Data version: {dv} | Last updated: {lu}")
+        self.cache_meta.setText(f"Data version: {dv} | Last updated: {lu}\nCache location: {self.cache_dir}")
+
+    def _set_status(self, message: str, level: str) -> None:
+        self.status_banner.setText(message); self.status_banner.setProperty("level", level); self.status_banner.style().unpolish(self.status_banner); self.status_banner.style().polish(self.status_banner)
 
     def _apply_filter(self) -> None:
-        query = self.search_box.text().strip().lower() if hasattr(self, "search_box") else ""
-        if query:
-            self.filtered_records = [r for r in self.records if query in " ".join(r.values()).lower()]
-        else:
-            self.filtered_records = list(self.records)
-        self.school_combo.blockSignals(True)
-        self.school_combo.clear()
-        for record in self.filtered_records:
-            self.school_combo.addItem(record.get("school_name", "Unnamed school"), record)
-        self.school_combo.blockSignals(False)
-        self._display_selected_school()
+        q = self.search_box.text().strip().lower() if hasattr(self, "search_box") else ""
+        self.filtered_records = [r for r in self.records if q in " ".join(r.values()).lower()] if q else list(self.records)
+        self.school_combo.blockSignals(True); self.school_combo.clear()
+        for r in self.filtered_records: self.school_combo.addItem(r.get("school_name", "Unnamed school"), r)
+        self.school_combo.blockSignals(False); self._display_selected_school()
 
     def _display_selected_school(self) -> None:
-        record = self.school_combo.currentData()
-        self._clear_cards()
-        if not record:
-            self.school_title.setText("No matching school found")
-            self.cards_layout.addWidget(QLabel("Try a different search term or reload the cached data."), 0, 0)
-            return
-
-        self.school_title.setText(record.get("school_name", "Selected school"))
-        grouped = self._group_fields(record)
-        for idx, category in enumerate(self.CATEGORY_ORDER):
-            row, col = divmod(idx, 2)
-            self.cards_layout.addWidget(self._make_category_card(category, grouped[category]), row, col)
+        record = self.school_combo.currentData(); self._clear_cards()
+        if not record: self.school_title.setText("No matching school found"); self.cards_layout.addWidget(QLabel("Try a different search term or reload the cached data."), 0, 0); return
+        self.school_title.setText(record.get("school_name", "Selected school")); grouped = self._group_fields(record)
+        for idx, category in enumerate(self.CATEGORY_ORDER): self.cards_layout.addWidget(self._make_category_card(category, grouped[category]), *divmod(idx, 2))
 
     def _group_fields(self, record: dict[str, str]) -> dict[str, list[tuple[str, str]]]:
         grouped = {name: [] for name in self.CATEGORY_ORDER}
-        for column, value in record.items():
-            if column == "school_id":
-                continue
-            category = self._resolve_category(column)
-            grouped[category].append((column, value))
+        for c, v in record.items():
+            if c != "school_id": grouped[self._resolve_category(c)].append((c, v))
         return grouped
 
     def _resolve_category(self, column: str) -> str:
         key = column.lower()
-        if any(term in key for term in ("time", "timetable", "session", "opening", "closing", "pool")):
-            return "Times"
-        if any(term in key for term in ("date", "term", "half", "inset", "holiday", "deadline")):
-            return "Dates"
-        if any(term in key for term in ("manager", "email", "phone", "website", "address", "contact")):
-            return "Contact"
+        if any(t in key for t in ("time", "timetable", "session", "opening", "closing", "pool")): return "Times"
+        if any(t in key for t in ("date", "term", "half", "inset", "holiday", "deadline")): return "Dates"
+        if any(t in key for t in ("manager", "email", "phone", "website", "address", "contact")): return "Contact"
         return "General"
 
     def _make_category_card(self, category: str, fields: list[tuple[str, str]]) -> QFrame:
-        card = QFrame()
-        card.setObjectName("categoryCard")
-        card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(8)
-        title = QLabel(category)
-        title.setObjectName("categoryTitle")
-        layout.addWidget(title)
-
+        card = QFrame(); card.setObjectName("categoryCard"); card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        layout = QVBoxLayout(card); layout.setContentsMargins(16, 16, 16, 16); layout.setSpacing(8)
+        t = QLabel(category); t.setObjectName("categoryTitle"); layout.addWidget(t)
         if not fields:
-            empty = QLabel(config.NOT_PROVIDED)
-            empty.setObjectName("cardBody")
-            empty.setWordWrap(True)
-            layout.addWidget(empty)
-            return card
-
+            empty = QLabel(config.NOT_PROVIDED); empty.setObjectName("cardBody"); layout.addWidget(empty); return card
         for column, value in fields:
-            field = QFrame()
-            field.setObjectName("fieldRow")
-            field_layout = QVBoxLayout(field)
-            field_layout.setContentsMargins(0, 0, 0, 6)
-            field_layout.setSpacing(4)
-            label = QLabel(readable_label(column))
-            label.setObjectName("cardLabel")
-            body = QLabel(value or config.NOT_PROVIDED)
-            body.setObjectName("cardBody")
-            body.setWordWrap(True)
-            body.setTextInteractionFlags(Qt.TextBrowserInteraction)
-            body.setOpenExternalLinks(True)
-            if value != config.NOT_PROVIDED and (column.lower() == "website" or value.startswith(("http://", "https://", "www."))):
-                url = normalise_url(value)
-                body.setText(f'<a href="{url}">{value}</a>')
-            elif value != config.NOT_PROVIDED and (column.lower() == "email" or is_probable_email(value)):
-                body.setText(f'<a href="mailto:{value}">{value}</a>')
-            field_layout.addWidget(label)
-            field_layout.addWidget(body)
-            layout.addWidget(field)
-
-        layout.addStretch(1)
-        return card
+            field = QFrame(); field.setObjectName("fieldRow"); fl = QVBoxLayout(field); fl.setContentsMargins(0, 0, 0, 6); fl.setSpacing(4)
+            label = QLabel(readable_label(column)); label.setObjectName("cardLabel"); body = QLabel(value or config.NOT_PROVIDED); body.setObjectName("cardBody"); body.setWordWrap(True); body.setTextInteractionFlags(Qt.TextBrowserInteraction); body.setOpenExternalLinks(True)
+            if value != config.NOT_PROVIDED and (column.lower() == "website" or value.startswith(("http://", "https://", "www."))): body.setText(f'<a href="{normalise_url(value)}">{value}</a>')
+            elif value != config.NOT_PROVIDED and (column.lower() == "email" or is_probable_email(value)): body.setText(f'<a href="mailto:{value}">{value}</a>')
+            fl.addWidget(label); fl.addWidget(body); layout.addWidget(field)
+        layout.addStretch(1); return card
 
     def _clear_cards(self) -> None:
         while self.cards_layout.count():
-            item = self.cards_layout.takeAt(0)
-            widget = item.widget()
-            if widget:
-                widget.deleteLater()
-
-    def _set_status(self, message: str, level: str) -> None:
-        self.status_banner.setText(message)
-        self.status_banner.setProperty("level", level)
-        self.status_banner.style().unpolish(self.status_banner)
-        self.status_banner.style().polish(self.status_banner)
+            item = self.cards_layout.takeAt(0); widget = item.widget()
+            if widget: widget.deleteLater()
 
     def _stylesheet(self) -> str:
         t = self.tokens
         return f"""
         QMainWindow, QWidget {{ background: {t.canvas_surface}; color: {t.text_primary}; font-family: {t.font_family}; font-size: 14px; }}
         QLabel {{ background: transparent; border: none; }}
-        QTextEdit, QTextBrowser {{ background: transparent; border: none; }}
         QFrame {{ background-color: transparent; }}
         #headerAccent {{ background: {self.theme['primary_colour']}; }}
         #header {{ background: {t.surface_default}; border-bottom: 1px solid {t.border_subtle}; min-height: 76px; max-height: 84px; }}
+        #mainTabs::pane {{ border: none; }}
+        QTabBar::tab {{ background: {t.surface_raised}; border: 1px solid {t.border_subtle}; padding: 8px 14px; margin-right: 4px; border-top-left-radius: {t.radius_md}px; border-top-right-radius: {t.radius_md}px; }}
+        QTabBar::tab:selected {{ background: {t.surface_default}; border-color: {t.border_default}; }}
         #statusMeta {{ color: {t.text_tertiary}; font-size: 12px; }}
-        #logoFallback {{ color: {t.text_secondary}; font-weight: 600; border: 1px solid {t.border_default}; padding: 12px; border-radius: 10px; }}
-        #toolbar {{ background: {t.surface_default}; border: 1px solid {t.border_subtle}; border-radius: {t.radius_lg}px; }}
+        #toolbar, #categoryCard {{ background: {t.surface_default}; border: 1px solid {t.border_subtle}; border-radius: {t.radius_lg}px; }}
         QLineEdit, QComboBox {{ background: {t.surface_input}; border: 1px solid {t.border_default}; border-radius: {t.radius_md}px; padding: 9px 10px; }}
-        QLineEdit:hover, QComboBox:hover {{ border-color: {t.text_tertiary}; }}
-        QLineEdit:focus, QComboBox:focus, QPushButton:focus {{ border: 1px solid {t.focus_ring}; outline: none; }}
-        QLineEdit:focus, QComboBox:focus {{ background: {t.surface_default}; }}
-        QPushButton {{ background: {t.action_brand}; color: {t.text_inverse}; border: 1px solid transparent; border-radius: {t.radius_md}px; padding: 9px 14px; font-size: 14px; font-weight: 600; }}
-        QPushButton:hover:enabled {{ background: {t.action_brand_hover}; }}
-        QPushButton:disabled {{ background: #CBD5E1; color: #64748B; }}
-        #statusBanner {{ background: {t.status_info_bg}; color: {t.status_info_fg}; border: 1px solid {t.border_subtle}; border-radius: {t.radius_md}px; padding: 8px 10px; font-size: 13px; }}
-        #statusBanner[level="error"] {{ background: {t.status_danger_bg}; color: {t.status_danger_fg}; border-color: #FECACA; }}
-        #statusBanner[level="success"] {{ background: {t.status_success_bg}; color: {t.status_success_fg}; border-color: #BBF7D0; }}
-        #statusBanner[level="warning"] {{ background: {t.status_warning_bg}; color: {t.status_warning_fg}; border-color: #FED7AA; }}
-        #schoolTitle {{ font-size: 28px; font-weight: 600; margin-top: 8px; }}
-        #categoryCard {{ background: {t.surface_raised}; border: 1px solid {t.border_subtle}; border-radius: {t.radius_lg}px; }}
-        #categoryCard:hover {{ border-color: {t.border_default}; }}
-        #categoryTitle {{ color: {self.theme['primary_colour']}; font-size: 16px; font-weight: 600; margin-bottom: 6px; }}
-        #fieldRow {{ border-bottom: 1px solid #EDF2F7; margin-bottom: 6px; }}
-        #cardLabel {{ color: {t.text_tertiary}; font-size: 12px; font-weight: 600; }}
-        #cardBody {{ color: {t.text_primary}; font-size: 14px; }}
+        QPushButton {{ background: {t.action_brand}; color: {t.text_inverse}; border-radius: {t.radius_md}px; padding: 9px 14px; font-weight: 600; }}
+        QPushButton:disabled {{ background: {t.border_default}; color: {t.text_tertiary}; }}
+        #statusBanner {{ background: {t.status_info_bg}; color: {t.status_info_fg}; border: 1px solid {t.border_subtle}; border-radius: {t.radius_md}px; padding: 8px 10px; }}
+        #statusBanner[level="error"] {{ background: {t.status_danger_bg}; color: {t.status_danger_fg}; }}
+        #statusBanner[level="success"] {{ background: {t.status_success_bg}; color: {t.status_success_fg}; }}
+        #statusBanner[level="warning"] {{ background: {t.status_warning_bg}; color: {t.status_warning_fg}; }}
+        #schoolTitle {{ font-size: 28px; font-weight: 600; }} #categoryTitle {{ color: {self.theme['primary_colour']}; font-size: 16px; font-weight: 600; }}
+        #cardLabel {{ color: {t.text_tertiary}; font-size: 12px; font-weight: 600; }} #fieldRow {{ border-bottom: 1px solid {t.border_subtle}; }}
         """
 
 
 def run_app(cache_dir: Path, theme: dict[str, str]) -> int:
-    app = QApplication([])
-    window = MainWindow(cache_dir, theme)
-    window.show()
-    return app.exec()
+    app = QApplication([]); window = MainWindow(cache_dir, theme); window.show(); return app.exec()

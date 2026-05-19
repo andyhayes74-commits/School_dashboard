@@ -141,7 +141,7 @@ def test_software_update_check_when_asset_missing(monkeypatch):
     monkeypatch.setattr(updater.requests, "get", lambda *_args, **_kwargs: DummyResponse(payload=payload))
     result = check_for_software_update("1.2.0", "Windows")
     assert result.update_available is False
-    assert "no compatible installer asset" in result.message.lower()
+    assert "no compatible installer was found" in result.message.lower()
 
 
 def test_software_update_check_invalid_placeholder_url():
