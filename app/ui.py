@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 from app import config
 from app.data_loader import DataValidationError, dataframe_to_school_records, load_schools_excel
 from app.sync import SyncResult, check_for_updates
+from app.ui_tokens import UITokens, build_tokens
 from app.updater import SoftwareUpdateResult, check_for_software_update, download_installer, install_downloaded_update
 from app.utils import is_probable_email, load_json_file, normalise_url, readable_label, resource_path
 
@@ -60,6 +61,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.cache_dir = cache_dir
         self.theme = {**config.DEFAULT_THEME, **theme}
+        self.tokens: UITokens = build_tokens(theme)
         self.records: list[dict[str, str]] = []
         self.filtered_records: list[dict[str, str]] = []
         self.sync_worker: SyncWorker | None = None
@@ -71,7 +73,7 @@ class MainWindow(QMainWindow):
         icon_path = resource_path("assets", "app_icon.ico")
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
-        self.resize(1000, 720)
+        self.resize(1080, 760)
 
         self._build_ui()
         self.reload_data(show_success=False)
@@ -85,47 +87,45 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
+        accent = QFrame()
+        accent.setObjectName("headerAccent")
+        accent.setFixedHeight(4)
+        layout.addWidget(accent)
+
         header = QFrame()
         header.setObjectName("header")
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(24, 18, 24, 18)
-        header_layout.setSpacing(24)
+        header_layout.setContentsMargins(24, 14, 24, 14)
 
         logo = QLabel()
-        logo.setMinimumWidth(190)
-        logo.setMaximumWidth(240)
+        logo.setMinimumWidth(240)
         logo_path = resource_path("assets", "logo.png")
         pixmap = QPixmap(str(logo_path)) if logo_path.exists() else QPixmap()
         if not pixmap.isNull():
-            logo.setPixmap(pixmap.scaled(220, 90, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            logo.setPixmap(pixmap.scaled(260, 104, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         else:
             logo.setText("Logo")
             logo.setObjectName("logoFallback")
         logo.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         header_layout.addWidget(logo)
-
-        title_block = QVBoxLayout()
-        title = QLabel(self.theme["app_title"])
-        title.setObjectName("title")
-        app_version = QLabel(f"Version {config.APP_VERSION}")
-        app_version.setObjectName("appVersion")
-        title_block.addWidget(title)
-        title_block.addWidget(app_version)
-        title_block.setAlignment(Qt.AlignVCenter)
-        header_layout.addLayout(title_block, 1)
+        header_layout.addStretch(1)
         layout.addWidget(header)
 
-        content = QVBoxLayout()
-        content.setContentsMargins(24, 20, 24, 24)
-        content.setSpacing(14)
-        layout.addLayout(content)
+        container = QFrame()
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(24, 20, 24, 24)
+        container_layout.setSpacing(16)
+        layout.addWidget(container, 1)
 
         self.status_banner = QLabel("Loading cached school data...")
         self.status_banner.setObjectName("statusBanner")
         self.status_banner.setWordWrap(True)
-        content.addWidget(self.status_banner)
+        container_layout.addWidget(self.status_banner)
 
-        controls = QGridLayout()
+        toolbar = QFrame()
+        toolbar.setObjectName("toolbar")
+        controls = QGridLayout(toolbar)
+        controls.setContentsMargins(16, 14, 16, 14)
         controls.setHorizontalSpacing(12)
         controls.setVerticalSpacing(8)
         self.search_box = QLineEdit()
@@ -142,26 +142,27 @@ class MainWindow(QMainWindow):
         controls.addWidget(self.school_combo, 1, 1)
         controls.addWidget(self.install_update_button, 1, 2)
         controls.setColumnStretch(1, 1)
-        content.addLayout(controls)
+        container_layout.addWidget(toolbar)
 
         self.status_meta = QLabel("Data version: Loading | Last updated: Loading")
         self.status_meta.setObjectName("statusMeta")
         self.status_meta.setWordWrap(True)
-        content.addWidget(self.status_meta)
+        container_layout.addWidget(self.status_meta)
 
         self.school_title = QLabel("Select a school")
         self.school_title.setObjectName("schoolTitle")
-        content.addWidget(self.school_title)
+        container_layout.addWidget(self.school_title)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
         self.cards_container = QWidget()
         self.cards_layout = QGridLayout(self.cards_container)
         self.cards_layout.setContentsMargins(0, 0, 0, 0)
-        self.cards_layout.setHorizontalSpacing(12)
-        self.cards_layout.setVerticalSpacing(12)
+        self.cards_layout.setHorizontalSpacing(16)
+        self.cards_layout.setVerticalSpacing(16)
         scroll.setWidget(self.cards_container)
-        content.addWidget(scroll, 1)
+        container_layout.addWidget(scroll, 1)
 
         self.setStyleSheet(self._stylesheet())
 
@@ -293,6 +294,8 @@ class MainWindow(QMainWindow):
         card.setObjectName("categoryCard")
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         layout = QVBoxLayout(card)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(8)
         title = QLabel(category)
         title.setObjectName("categoryTitle")
         layout.addWidget(title)
@@ -308,8 +311,8 @@ class MainWindow(QMainWindow):
             field = QFrame()
             field.setObjectName("fieldRow")
             field_layout = QVBoxLayout(field)
-            field_layout.setContentsMargins(0, 0, 0, 0)
-            field_layout.setSpacing(1)
+            field_layout.setContentsMargins(0, 0, 0, 6)
+            field_layout.setSpacing(4)
             label = QLabel(readable_label(column))
             label.setObjectName("cardLabel")
             body = QLabel(value or config.NOT_PROVIDED)
@@ -343,32 +346,35 @@ class MainWindow(QMainWindow):
         self.status_banner.style().polish(self.status_banner)
 
     def _stylesheet(self) -> str:
-        primary = self.theme["primary_colour"]
-        secondary = self.theme["secondary_colour"]
-        accent = self.theme["accent_colour"]
-        text = self.theme["text_colour"]
+        t = self.tokens
         return f"""
-        QMainWindow, QWidget {{ background: {secondary}; color: {text}; font-family: Arial, Helvetica, sans-serif; font-size: 14px; }}
+        QMainWindow, QWidget {{ background: {t.canvas_surface}; color: {t.text_primary}; font-family: {t.font_family}; font-size: 14px; }}
         QLabel {{ background: transparent; border: none; }}
         QTextEdit, QTextBrowser {{ background: transparent; border: none; }}
         QFrame {{ background-color: transparent; }}
-        #header {{ background: {primary}; color: white; }}
-        #title {{ color: white; font-size: 30px; font-weight: 700; }}
-        #appVersion {{ color: #DCE7FF; font-size: 14px; font-weight: 600; }}
-        #statusMeta {{ color: {text}; font-size: 12px; }}
-        #logoFallback {{ color: white; font-weight: 700; border: 1px solid white; padding: 12px; border-radius: 8px; }}
-        QLineEdit, QComboBox {{ background: white; border: 1px solid #CBD5E1; border-radius: 6px; padding: 8px; }}
-        QPushButton {{ background: {accent}; color: white; border: 0; border-radius: 6px; padding: 9px 14px; font-weight: 600; }}
-        QPushButton:disabled {{ background: #94A3B8; }}
-        #statusBanner {{ background: #E0F2FE; color: #075985; border-radius: 8px; padding: 10px 12px; }}
-        #statusBanner[level="error"] {{ background: #FEE2E2; color: #991B1B; }}
-        #statusBanner[level="success"] {{ background: #DCFCE7; color: #166534; }}
-        #schoolTitle {{ font-size: 22px; font-weight: 700; margin-top: 8px; }}
-        #categoryCard {{ background: white; border: 1px solid #E5E7EB; border-radius: 10px; padding: 12px; }}
-        #categoryTitle {{ color: {primary}; font-weight: 700; font-size: 18px; margin-bottom: 8px; }}
-        #fieldRow {{ border-bottom: 1px solid #EEF2F7; padding-bottom: 8px; margin-bottom: 8px; }}
-        #cardLabel {{ color: {primary}; font-weight: 700; font-size: 13px; }}
-        #cardBody {{ color: {text}; font-size: 14px; }}
+        #headerAccent {{ background: {self.theme['primary_colour']}; }}
+        #header {{ background: {t.surface_default}; border-bottom: 1px solid {t.border_subtle}; min-height: 76px; max-height: 84px; }}
+        #statusMeta {{ color: {t.text_tertiary}; font-size: 12px; }}
+        #logoFallback {{ color: {t.text_secondary}; font-weight: 600; border: 1px solid {t.border_default}; padding: 12px; border-radius: 10px; }}
+        #toolbar {{ background: {t.surface_default}; border: 1px solid {t.border_subtle}; border-radius: {t.radius_lg}px; }}
+        QLineEdit, QComboBox {{ background: {t.surface_input}; border: 1px solid {t.border_default}; border-radius: {t.radius_md}px; padding: 9px 10px; }}
+        QLineEdit:hover, QComboBox:hover {{ border-color: {t.text_tertiary}; }}
+        QLineEdit:focus, QComboBox:focus, QPushButton:focus {{ border: 1px solid {t.focus_ring}; outline: none; }}
+        QLineEdit:focus, QComboBox:focus {{ background: {t.surface_default}; }}
+        QPushButton {{ background: {t.action_brand}; color: {t.text_inverse}; border: 1px solid transparent; border-radius: {t.radius_md}px; padding: 9px 14px; font-size: 14px; font-weight: 600; }}
+        QPushButton:hover:enabled {{ background: {t.action_brand_hover}; }}
+        QPushButton:disabled {{ background: #CBD5E1; color: #64748B; }}
+        #statusBanner {{ background: {t.status_info_bg}; color: {t.status_info_fg}; border: 1px solid {t.border_subtle}; border-radius: {t.radius_md}px; padding: 8px 10px; font-size: 13px; }}
+        #statusBanner[level="error"] {{ background: {t.status_danger_bg}; color: {t.status_danger_fg}; border-color: #FECACA; }}
+        #statusBanner[level="success"] {{ background: {t.status_success_bg}; color: {t.status_success_fg}; border-color: #BBF7D0; }}
+        #statusBanner[level="warning"] {{ background: {t.status_warning_bg}; color: {t.status_warning_fg}; border-color: #FED7AA; }}
+        #schoolTitle {{ font-size: 28px; font-weight: 600; margin-top: 8px; }}
+        #categoryCard {{ background: {t.surface_raised}; border: 1px solid {t.border_subtle}; border-radius: {t.radius_lg}px; }}
+        #categoryCard:hover {{ border-color: {t.border_default}; }}
+        #categoryTitle {{ color: {self.theme['primary_colour']}; font-size: 16px; font-weight: 600; margin-bottom: 6px; }}
+        #fieldRow {{ border-bottom: 1px solid #EDF2F7; margin-bottom: 6px; }}
+        #cardLabel {{ color: {t.text_tertiary}; font-size: 12px; font-weight: 600; }}
+        #cardBody {{ color: {t.text_primary}; font-size: 14px; }}
         """
 
 
