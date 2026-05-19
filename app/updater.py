@@ -48,11 +48,11 @@ def check_for_software_update(
         response.raise_for_status()
         release = _parse_latest_release(response.json(), platform_name)
         if not release:
-            return SoftwareUpdateResult(False, "No compatible installer asset found for this platform in the latest release.", current_version)
+            return SoftwareUpdateResult(False, "No compatible installer was found for this platform.", current_version)
 
         latest_version = release["version"]
         if not is_newer_version(latest_version, current_version):
-            return SoftwareUpdateResult(False, "You already have the latest software version.", current_version, latest_version)
+            return SoftwareUpdateResult(False, "You already have the latest version.", current_version, latest_version)
 
         return SoftwareUpdateResult(
             True,
@@ -67,6 +67,8 @@ def check_for_software_update(
     except requests.exceptions.Timeout as exc:
         return SoftwareUpdateResult(False, f"GitHub API request timed out. Details: {exc}", current_version)
     except requests.exceptions.HTTPError as exc:
+        if getattr(exc.response, "status_code", None) == 404:
+            return SoftwareUpdateResult(False, "Update source not found. Check that the repository is public and has a published release.", current_version)
         return SoftwareUpdateResult(False, f"GitHub API request failed. Details: {exc}", current_version)
     except ValueError as exc:
         return SoftwareUpdateResult(False, f"GitHub API response could not be parsed. Details: {exc}", current_version)

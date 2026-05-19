@@ -45,8 +45,43 @@ class UITokens:
 FONT_STACK = '"Segoe UI Variable", "Inter", "Segoe UI", Roboto, Arial, sans-serif'
 
 
-def build_tokens(theme: dict[str, str]) -> UITokens:
+def build_tokens(theme: dict[str, str], dark_mode: bool = False) -> UITokens:
     merged = {**config.DEFAULT_THEME, **theme}
+    if dark_mode:
+        return UITokens(
+            font_family=FONT_STACK,
+            canvas_surface="#0B1220",
+            surface_default="#111827",
+            surface_raised="#172033",
+            surface_input="#0F172A",
+            text_primary="#F8FAFC",
+            text_secondary="#CBD5E1",
+            text_tertiary="#94A3B8",
+            text_inverse="#F8FAFC",
+            border_subtle="#334155",
+            border_default="#475569",
+            action_brand="#60A5FA",
+            action_brand_hover=merged["accent_colour"],
+            status_success_bg="#064E3B",
+            status_success_fg="#D1FAE5",
+            status_info_bg="#1E3A8A",
+            status_info_fg="#DBEAFE",
+            status_warning_bg="#7C2D12",
+            status_warning_fg="#FFEDD5",
+            status_danger_bg="#7F1D1D",
+            status_danger_fg="#FEE2E2",
+            radius_sm=6,
+            radius_md=10,
+            radius_lg=12,
+            space_1=4,
+            space_2=8,
+            space_3=12,
+            space_4=16,
+            space_5=20,
+            space_6=24,
+            focus_ring="#60A5FA",
+        )
+
     return UITokens(
         font_family=FONT_STACK,
         canvas_surface=merged["secondary_colour"],
